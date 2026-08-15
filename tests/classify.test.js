@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { classifyPage } from "../server/classify.js";
-import { normalizeUrl } from "../server/fetchPage.js";
+import { isPrivateIp, normalizeUrl } from "../server/fetchPage.js";
 
 function page(title, extra = "") {
   return {
@@ -59,5 +59,22 @@ describe("normalizeUrl", () => {
   it("rejects private hosts", () => {
     assert.throws(() => normalizeUrl("http://127.0.0.1"), /not allowed/);
     assert.throws(() => normalizeUrl("http://localhost"), /not allowed/);
+  });
+});
+
+describe("isPrivateIp", () => {
+  it("allows public IPv4 and IPv6, including Cloudflare 172.66", () => {
+    assert.equal(isPrivateIp("104.20.23.154"), false);
+    assert.equal(isPrivateIp("172.66.147.243"), false);
+    assert.equal(isPrivateIp("2606:4700:10::6814:179a"), false);
+  });
+
+  it("blocks loopback, RFC1918, and link-local", () => {
+    assert.equal(isPrivateIp("127.0.0.1"), true);
+    assert.equal(isPrivateIp("10.0.0.8"), true);
+    assert.equal(isPrivateIp("192.168.1.1"), true);
+    assert.equal(isPrivateIp("172.16.0.1"), true);
+    assert.equal(isPrivateIp("169.254.169.254"), true);
+    assert.equal(isPrivateIp("::1"), true);
   });
 });

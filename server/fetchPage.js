@@ -7,22 +7,34 @@ const MAX_REDIRECTS = 4;
 
 const BLOCKED_HOSTS = new Set(["localhost", "metadata.google.internal"]);
 
-function isPrivateIp(ip) {
+export function isPrivateIp(ip) {
   if (!ip) return true;
-  if (ip === "::1" || ip.startsWith("fe80:") || ip.startsWith("fc") || ip.startsWith("fd")) {
-    return true;
+
+  if (ip.includes(":") && !ip.includes(".")) {
+    const compact = ip.toLowerCase();
+    return (
+      compact === "::1" ||
+      compact === "::" ||
+      compact.startsWith("fe80:") ||
+      compact.startsWith("fc") ||
+      compact.startsWith("fd") ||
+      compact.startsWith("::ffff:127.") ||
+      compact.startsWith("::ffff:10.") ||
+      compact.startsWith("::ffff:192.168.")
+    );
   }
-  const v4 = ip.includes(":") && ip.includes(".") ? ip.split(":").pop() : ip;
+
+  const v4 = ip.includes(":") ? ip.split(":").pop() : ip;
   const parts = v4.split(".").map(Number);
   if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) {
-    return ip.includes(":");
+    return true;
   }
   const [a, b] = parts;
   return (
     a === 0 ||
     a === 10 ||
     a === 127 ||
-    a === 169 ||
+    (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
     (a === 100 && b >= 64 && b <= 127)
