@@ -1,0 +1,19 @@
+{
+  "name": "site-detector",
+  "version": "1.0.0",
+  "description": "Load a URL and classify the site into gift cards/games, eSIM, clothing, VPS, casino, or donation.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cheerio": "^1.1.2",
+    "express": "^5.1.0"
+  }
+}
