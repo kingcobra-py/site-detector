@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { classifyPage } from "../server/classify.js";
-import { groupResults, parseUrlList } from "../server/detect.js";
+import { extractUrlCandidates, groupResults, parseUrlList } from "../server/detect.js";
 import { isPrivateIp, normalizeUrl } from "../server/fetchPage.js";
 
 function page(title, extra = "") {
@@ -80,6 +80,14 @@ describe("parseUrlList", () => {
   it("rejects more than 40 URLs", () => {
     const text = Array.from({ length: 41 }, (_, i) => `https://shop${i}.example`).join("\n");
     assert.throws(() => parseUrlList(text), /At most 40/);
+  });
+
+  it("pulls http URLs out of an HTML dump instead of treating every word as a URL", () => {
+    const html = `<!DOCTYPE html><html><body><a href="https://www.airalo.com/">eSIM</a> and https://contabo.com extra words</body></html>`;
+    const candidates = extractUrlCandidates(html);
+    assert.ok(candidates.every((item) => item.startsWith("http")));
+    const { urls } = parseUrlList(html);
+    assert.deepEqual(urls, ["https://www.airalo.com/", "https://contabo.com/"]);
   });
 });
 

@@ -5,10 +5,36 @@ import { GROUPS, UNKNOWN_GROUP, groupById } from "./groups.js";
 export const MAX_BULK_URLS = 40;
 const CONCURRENCY = 5;
 
+function cleanCandidate(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[.,;:)+\]}]+$/g, "");
+}
+
+export function extractUrlCandidates(input) {
+  if (Array.isArray(input)) {
+    return input.map(cleanCandidate).filter(Boolean);
+  }
+
+  const text = String(input || "");
+  const fromLinks = (text.match(/https?:\/\/[^\s<>"'`]+/gi) || []).map(cleanCandidate);
+  const fromLines = [];
+
+  for (const line of text.split(/[\n\r]+/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed.length > 400 || /<!doctype|<html|<div|<body/i.test(trimmed)) {
+      fromLines.push(...(trimmed.match(/https?:\/\/[^\s<>"'`]+/gi) || []).map(cleanCandidate));
+      continue;
+    }
+    fromLines.push(...trimmed.split(/[,;\t ]+/).map(cleanCandidate).filter(Boolean));
+  }
+
+  return [...new Set([...fromLines, ...fromLinks])];
+}
+
 export function parseUrlList(input, { max = MAX_BULK_URLS } = {}) {
-  const raw = Array.isArray(input)
-    ? input
-    : String(input || "").split(/[\n\r,;\t ]+/);
+  const raw = extractUrlCandidates(input);
 
   const seen = new Set();
   const urls = [];

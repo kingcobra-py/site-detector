@@ -114,6 +114,38 @@ function renderGroups(data) {
   });
 }
 
+function extractUrls(text) {
+  const found = [];
+  const seen = new Set();
+  for (const line of String(text || "").split(/[\n\r]+/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const embedded = trimmed.match(/https?:\/\/[^\s<>"'`]+/gi);
+    const parts =
+      embedded && (embedded.length > 1 || trimmed.length > 400 || /<!doctype|<html/i.test(trimmed))
+        ? embedded
+        : trimmed.split(/[,;\t ]+/).filter(Boolean);
+    for (const part of parts) {
+      const url = part.trim().replace(/[.,;:)+\]}]+$/g, "");
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      found.push(url);
+    }
+  }
+  return found;
+}
+
+async function readJson(response) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      "The server sent a web page instead of results. Paste up to 40 URLs, one per line, and try again.",
+    );
+  }
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   resultEl.classList.add("hidden");
@@ -122,12 +154,20 @@ form.addEventListener("submit", async (event) => {
   showStatus("Loading the URLs and sorting them into groups…");
 
   try {
+    const urls = extractUrls(input.value);
+    if (!urls.length) {
+      throw new Error("Paste at least one URL.");
+    }
+    if (urls.length > 40) {
+      throw new Error(`Paste at most 40 URLs. You entered ${urls.length}.`);
+    }
+
     const response = await fetch("/api/detect-bulk", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: input.value }),
+      body: JSON.stringify({ urls }),
     });
-    const data = await response.json();
+    const data = await readJson(response);
     if (!response.ok) {
       throw new Error(data.error || "Detection failed");
     }

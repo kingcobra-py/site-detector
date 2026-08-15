@@ -10,7 +10,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 
 const app = express();
-app.use(express.json({ limit: "256kb" }));
+app.use(express.json({ limit: "2mb" }));
 app.use(express.static(path.join(__dirname, "../public")));
 
 app.get("/api/groups", (_req, res) => {
@@ -43,8 +43,25 @@ app.post("/api/detect-bulk", async (req, res) => {
   }
 });
 
+app.all("/api/{*path}", (_req, res) => {
+  res.status(404).json({ error: "Unknown API route" });
+});
+
 app.get("/{*path}", (_req, res) => {
   res.sendFile(path.join(__dirname, "../public/index.html"));
+});
+
+app.use((error, _req, res, next) => {
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+  const tooLarge = error?.type === "entity.too.large" || error?.status === 413;
+  res.status(tooLarge ? 413 : error.status || 500).json({
+    error: tooLarge
+      ? "The URL list is too large. Paste up to 40 URLs, one per line."
+      : error.message || "Request failed",
+  });
 });
 
 app.listen(PORT, HOST, () => {
