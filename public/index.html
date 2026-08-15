@@ -11,55 +11,59 @@
     <main class="wrap">
       <header class="hero">
         <p class="eyebrow">URL classifier</p>
-        <h1>Load a site. Sort it into a seller group.</h1>
+        <h1>Paste URLs. See them in seller groups.</h1>
         <p class="lede">
-          Paste a URL. The detector fetches the page, reads title, description, and
-          body text, then assigns one group: gift cards / games / CD keys / top-up,
-          eSIM, clothes, VPS / servers, casino / gambling, or donation.
+          One URL or a whole list. The detector visits each page and sorts it into
+          gift cards / games / CD keys / top-up, eSIM, clothes, VPS / servers,
+          casino / gambling, or donation.
         </p>
       </header>
 
       <form id="detect-form" class="panel">
-        <label for="url">Website URL</label>
-        <div class="row">
-          <input
-            id="url"
-            name="url"
-            type="url"
-            inputmode="url"
-            autocomplete="url"
-            placeholder="https://example.com"
-            required
-          />
-          <button type="submit" id="submit">Detect</button>
+        <label for="urls">Website URLs</label>
+        <textarea
+          id="urls"
+          name="urls"
+          rows="8"
+          required
+          placeholder="https://example.com&#10;https://another-shop.com&#10;shop3.com"
+        ></textarea>
+        <div class="row actions">
+          <p class="hint">One per line, or separated by spaces or commas. Up to 40 URLs.</p>
+          <button type="submit" id="submit">Detect all</button>
         </div>
-        <p class="hint">http or https. The server visits the page so you do not have to.</p>
       </form>
 
       <section class="groups" aria-label="Tracked groups">
         <article class="chip" data-group="digital_goods">
           <span class="dot"></span>
-          Gift cards / Games / CD keys / Top-up
+          <span>Gift cards / Games / CD keys / Top-up</span>
+          <strong class="count" data-count="digital_goods">0</strong>
         </article>
         <article class="chip" data-group="esim">
           <span class="dot"></span>
-          eSIM
+          <span>eSIM</span>
+          <strong class="count" data-count="esim">0</strong>
         </article>
         <article class="chip" data-group="clothing">
           <span class="dot"></span>
-          Clothes
+          <span>Clothes</span>
+          <strong class="count" data-count="clothing">0</strong>
         </article>
         <article class="chip" data-group="hosting">
           <span class="dot"></span>
-          VPS / Servers
+          <span>VPS / Servers</span>
+          <strong class="count" data-count="hosting">0</strong>
         </article>
         <article class="chip" data-group="gambling">
           <span class="dot"></span>
-          Casino / Gambling
+          <span>Casino / Gambling</span>
+          <strong class="count" data-count="gambling">0</strong>
         </article>
         <article class="chip" data-group="donation">
           <span class="dot"></span>
-          Donation
+          <span>Donation</span>
+          <strong class="count" data-count="donation">0</strong>
         </article>
       </section>
 

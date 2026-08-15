@@ -18,7 +18,7 @@ npm install
 npm start
 ```
 
-Open http://localhost:3000, paste a URL, and click **Detect**.
+Open http://localhost:3000, paste one URL or a list (one per line), and click **Detect all**. Results are shown in seller groups.
 
 The server visits the page (so the browser does not hit CORS), reads title, meta description, headings, and body text, then scores keyword signals for each group.
 

@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { classifyPage } from "../server/classify.js";
+import { groupResults, parseUrlList } from "../server/detect.js";
 import { isPrivateIp, normalizeUrl } from "../server/fetchPage.js";
 
 function page(title, extra = "") {
@@ -59,6 +60,44 @@ describe("normalizeUrl", () => {
   it("rejects private hosts", () => {
     assert.throws(() => normalizeUrl("http://127.0.0.1"), /not allowed/);
     assert.throws(() => normalizeUrl("http://localhost"), /not allowed/);
+  });
+});
+
+describe("parseUrlList", () => {
+  it("splits lines, commas, and spaces, then dedupes", () => {
+    const { urls, invalid } = parseUrlList(
+      "eneba.com\nhttps://airalo.com, gap.com gap.com\nhttp://127.0.0.1",
+    );
+    assert.deepEqual(urls, [
+      "https://eneba.com/",
+      "https://airalo.com/",
+      "https://gap.com/",
+    ]);
+    assert.equal(invalid.length, 1);
+    assert.match(invalid[0].error, /not allowed/);
+  });
+
+  it("rejects more than 40 URLs", () => {
+    const text = Array.from({ length: 41 }, (_, i) => `https://shop${i}.example`).join("\n");
+    assert.throws(() => parseUrlList(text), /At most 40/);
+  });
+});
+
+describe("groupResults", () => {
+  it("puts URLs into seller groups", () => {
+    const grouped = groupResults(
+      [
+        { requestedUrl: "https://eneba.com/", group: { id: "digital_goods", label: "Digital" } },
+        { requestedUrl: "https://airalo.com/", group: { id: "esim", label: "eSIM" } },
+        { requestedUrl: "https://gap.com/", group: { id: "clothing", label: "Clothes" } },
+      ],
+      [{ url: "https://bad.example/", error: "timeout" }],
+    );
+    assert.equal(grouped.ok, 3);
+    assert.equal(grouped.failed, 1);
+    assert.equal(grouped.groups.find((g) => g.id === "digital_goods").items.length, 1);
+    assert.equal(grouped.groups.find((g) => g.id === "esim").items[0].requestedUrl, "https://airalo.com/");
+    assert.equal(grouped.groups.find((g) => g.id === "hosting").items.length, 0);
   });
 });
 

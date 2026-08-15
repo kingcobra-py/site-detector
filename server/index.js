@@ -1,8 +1,8 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { classifyPage } from "./classify.js";
-import { fetchPage, normalizeUrl } from "./fetchPage.js";
+import { detectMany, detectOne } from "./detect.js";
+import { normalizeUrl } from "./fetchPage.js";
 import { GROUPS, UNKNOWN_GROUP } from "./groups.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -10,7 +10,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 
 const app = express();
-app.use(express.json({ limit: "32kb" }));
+app.use(express.json({ limit: "256kb" }));
 app.use(express.static(path.join(__dirname, "../public")));
 
 app.get("/api/groups", (_req, res) => {
@@ -27,23 +27,19 @@ app.post("/api/detect", async (req, res) => {
   }
 
   try {
-    const page = await fetchPage(input);
-    const result = classifyPage({ html: page.html, url: page.url });
-    res.json({
-      requestedUrl: page.requestedUrl,
-      finalUrl: page.url,
-      status: page.status,
-      title: result.title,
-      description: result.description,
-      hostname: result.hostname,
-      group: result.group,
-      confidence: result.confidence,
-      scores: result.scores,
-      ranked: result.ranked,
-      matches: result.matches,
-    });
+    res.json(await detectOne(input));
   } catch (error) {
     res.status(502).json({ error: error.message || "Could not analyze that site" });
+  }
+});
+
+app.post("/api/detect-bulk", async (req, res) => {
+  const input = req.body?.urls ?? req.body?.text ?? req.body?.url;
+  try {
+    res.json(await detectMany(input));
+  } catch (error) {
+    const status = error.code === "TOO_MANY" ? 400 : 502;
+    res.status(status).json({ error: error.message || "Could not analyze those sites" });
   }
 });
 
