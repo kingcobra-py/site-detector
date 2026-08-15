@@ -27,3 +27,11 @@ The server visits the page (so the browser does not hit CORS), reads title, meta
 ```bash
 npm test
 ```
+
+## Deploy
+
+On a Ubuntu host with Node 20+ and nginx:
+
+1. Copy the repo to `/opt/site-detector` and run `npm ci --omit=dev`.
+2. Install `deploy/site-detector.service` as a systemd unit (app listens on `127.0.0.1:3001`).
+3. Enable `deploy/nginx-site-detector.conf` so nginx serves the app on port **3000**.
