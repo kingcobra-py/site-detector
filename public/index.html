@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Site Detector</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg"></div>
+    <main class="wrap">
+      <header class="hero">
+        <p class="eyebrow">URL classifier</p>
+        <h1>Load a site. Sort it into a seller group.</h1>
+        <p class="lede">
+          Paste a URL. The detector fetches the page, reads title, description, and
+          body text, then assigns one group: gift cards / games / CD keys / top-up,
+          eSIM, clothes, VPS / servers, casino / gambling, or donation.
+        </p>
+      </header>
+
+      <form id="detect-form" class="panel">
+        <label for="url">Website URL</label>
+        <div class="row">
+          <input
+            id="url"
+            name="url"
+            type="url"
+            inputmode="url"
+            autocomplete="url"
+            placeholder="https://example.com"
+            required
+          />
+          <button type="submit" id="submit">Detect</button>
+        </div>
+        <p class="hint">http or https. The server visits the page so you do not have to.</p>
+      </form>
+
+      <section class="groups" aria-label="Tracked groups">
+        <article class="chip" data-group="digital_goods">
+          <span class="dot"></span>
+          Gift cards / Games / CD keys / Top-up
+        </article>
+        <article class="chip" data-group="esim">
+          <span class="dot"></span>
+          eSIM
+        </article>
+        <article class="chip" data-group="clothing">
+          <span class="dot"></span>
+          Clothes
+        </article>
+        <article class="chip" data-group="hosting">
+          <span class="dot"></span>
+          VPS / Servers
+        </article>
+        <article class="chip" data-group="gambling">
+          <span class="dot"></span>
+          Casino / Gambling
+        </article>
+        <article class="chip" data-group="donation">
+          <span class="dot"></span>
+          Donation
+        </article>
+      </section>
+
+      <section id="status" class="status hidden" aria-live="polite"></section>
+      <section id="result" class="result hidden"></section>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
