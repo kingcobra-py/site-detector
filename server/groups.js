@@ -151,6 +151,13 @@ export const SIGNALS = {
     { term: "shop the look", weight: 4 },
     { term: "new arrivals", weight: 2 },
     { term: "collection", weight: 1 },
+    { term: "shoes", weight: 3 },
+    { term: "footwear", weight: 4 },
+    { term: "jacket", weight: 3 },
+    { term: "jackets", weight: 3 },
+    { term: "shop men", weight: 3 },
+    { term: "shop women", weight: 3 },
+    { term: "kids clothing", weight: 5 },
   ],
   hosting: [
     { term: "vps", weight: 8 },
