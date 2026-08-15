@@ -27,6 +27,21 @@ describe("classifyPage", () => {
     assert.equal(topup.group.id, "digital_goods");
   });
 
+  it("detects gift-card and video-game shops in other languages", () => {
+    const french = classifyPage(page("Cartes cadeaux Apple et jeux vidéo", "Clé Steam et boutique de jeux numériques."));
+    const spanish = classifyPage(page("Tarjetas de regalo Xbox y videojuegos", "Clave de juego y recarga de juegos."));
+    const german = classifyPage(page("Geschenkkarten und Videospiele kaufen", "Steam Spielkey und Produktschlüssel."));
+    const arabic = classifyPage(page("بطاقة هدية أبل", "شحن الألعاب ومفتاح ستيم."));
+    const chinese = classifyPage(page("苹果礼品卡", "游戏密钥和游戏充值。"));
+    const russian = classifyPage(page("Подарочная карта Xbox", "Видеоигры и ключи Steam."));
+    assert.equal(french.group.id, "digital_goods");
+    assert.equal(spanish.group.id, "digital_goods");
+    assert.equal(german.group.id, "digital_goods");
+    assert.equal(arabic.group.id, "digital_goods");
+    assert.equal(chinese.group.id, "digital_goods");
+    assert.equal(russian.group.id, "digital_goods");
+  });
+
   it("detects eSIM stores", () => {
     const result = classifyPage(page("Travel eSIM data plans", "Activate eSIM with QR code. Airalo alternative."));
     assert.equal(result.group.id, "esim");
