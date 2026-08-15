@@ -82,15 +82,29 @@ body {
   gap: 10px;
 }
 
+.actions {
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.actions .hint {
+  margin: 0;
+}
+
+textarea,
 input {
   flex: 1;
   min-width: 0;
+  width: 100%;
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #0f141b;
   color: var(--text);
   font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
 }
 
 button {
@@ -123,6 +137,11 @@ button:disabled {
   border-radius: 12px;
   background: #111821;
   font-size: 0.92rem;
+}
+
+.chip .count {
+  margin-left: auto;
+  color: var(--muted);
 }
 
 .chip.active {
@@ -203,8 +222,71 @@ button:disabled {
   border-bottom: 1px solid var(--line);
 }
 
+.bucket {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.bucket header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bucket h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  font-size: 1.05rem;
+}
+
+.bucket ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bucket li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.bucket a {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.copy {
+  padding: 6px 10px;
+  background: #0f141b;
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.bucket[data-group="digital_goods"] .dot { background: var(--digital_goods); }
+.bucket[data-group="esim"] .dot { background: var(--esim); }
+.bucket[data-group="clothing"] .dot { background: var(--clothing); }
+.bucket[data-group="hosting"] .dot { background: var(--hosting); }
+.bucket[data-group="gambling"] .dot { background: var(--gambling); }
+.bucket[data-group="donation"] .dot { background: var(--donation); }
+.bucket[data-group="unknown"] .dot { background: var(--unknown); }
+
+.error-bucket h2 {
+  color: #ffb3c0;
+}
+
 @media (max-width: 640px) {
-  .row {
+  .row,
+  .actions,
+  .bucket header {
     flex-direction: column;
+    align-items: stretch;
   }
 }
