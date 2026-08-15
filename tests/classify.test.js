@@ -12,11 +12,17 @@ function page(title, extra = "") {
 }
 
 describe("classifyPage", () => {
-  it("groups gift cards, game keys, CD keys, and top-up together", () => {
+  it("groups gift cards, video games, Xbox, Apple, CD keys, and top-up together", () => {
     const gift = classifyPage(page("Buy Steam gift cards and Xbox gift cards"));
+    const apple = classifyPage(page("Apple Gift Card and iTunes gift cards"));
+    const xbox = classifyPage(page("Xbox Game Pass and Xbox gift card store"));
+    const games = classifyPage(page("Buy video games and PC games digital download"));
     const keys = classifyPage(page("Cheap CD keys and Steam game keys instant delivery"));
     const topup = classifyPage(page("Game top-up for Mobile Legends and PUBG UC"));
     assert.equal(gift.group.id, "digital_goods");
+    assert.equal(apple.group.id, "digital_goods");
+    assert.equal(xbox.group.id, "digital_goods");
+    assert.equal(games.group.id, "digital_goods");
     assert.equal(keys.group.id, "digital_goods");
     assert.equal(topup.group.id, "digital_goods");
   });

@@ -4,7 +4,7 @@ Web app that loads a URL, fetches the live page, and classifies the site into on
 
 | Group | What it catches |
 | --- | --- |
-| Gift cards / Games / CD keys / Top-up | Gift card shops, game key stores, CD keys, in-game top-up |
+| Gift cards / Video games / Xbox / Apple | Video game shops, CD keys, Apple/Xbox/PlayStation gift cards, in-game top-up |
 | eSIM | Travel eSIM and data-plan sellers |
 | Clothes | Apparel and fashion stores |
 | VPS / Servers | VPS, dedicated servers, hosting |
