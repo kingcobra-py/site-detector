@@ -1,6 +1,8 @@
 const form = document.querySelector("#detect-form");
 const input = document.querySelector("#urls");
+const threadsInput = document.querySelector("#threads");
 const submit = document.querySelector("#submit");
+const stopBtn = document.querySelector("#stop");
 const statusEl = document.querySelector("#status");
 const resultEl = document.querySelector("#result");
 
@@ -14,15 +16,19 @@ const GROUP_ORDER = [
   "unknown",
 ];
 
+let runId = 0;
+let activeFilter = null;
+let lastState = { total: 0, ok: 0, failed: 0, groups: emptyGroups(), errors: [] };
+let controllers = [];
+
+function emptyGroups() {
+  return GROUP_ORDER.map((id) => ({ id, items: [] }));
+}
+
 function showStatus(message, isError = false) {
   statusEl.classList.remove("hidden");
   statusEl.classList.toggle("error", isError);
   statusEl.textContent = message;
-}
-
-function hideStatus() {
-  statusEl.classList.add("hidden");
-  statusEl.textContent = "";
 }
 
 function escapeHtml(value) {
@@ -42,15 +48,23 @@ function setCounts(groups) {
     el.textContent = String(counts[el.dataset.count] || 0);
   });
   document.querySelectorAll(".chip").forEach((chip) => {
-    const n = counts[chip.dataset.group] || 0;
+    const id = chip.dataset.group;
+    const n = counts[id] || 0;
     chip.classList.toggle("active", n > 0);
-    chip.style.setProperty("--match", `var(--${chip.dataset.group})`);
+    chip.classList.toggle("selected", activeFilter === id);
+    chip.classList.toggle("dim", Boolean(activeFilter) && activeFilter !== id);
+    chip.style.setProperty("--match", `var(--${id})`);
   });
 }
 
 function renderGroups(data) {
-  const groups = (data.groups || []).filter((group) => group.items?.length);
-  const errors = data.errors || [];
+  lastState = data;
+  const filter = activeFilter;
+  const groups = (data.groups || []).filter((group) => {
+    if (!group.items?.length) return false;
+    return !filter || group.id === filter;
+  });
+  const errors = filter && filter !== "unknown" ? [] : data.errors || [];
   setCounts(data.groups);
 
   const groupHtml = groups
@@ -68,7 +82,7 @@ function renderGroups(data) {
         .join("");
       return `<article class="bucket" data-group="${escapeHtml(group.id)}">
         <header>
-          <h2><span class="dot"></span>${escapeHtml(group.label)}</h2>
+          <h2><span class="dot"></span>${escapeHtml(group.label || group.id)}</h2>
           <button type="button" class="copy" data-copy="${escapeHtml(group.id)}">Copy URLs</button>
         </header>
         <ol>${rows}</ol>
@@ -76,8 +90,9 @@ function renderGroups(data) {
     })
     .join("");
 
-  const errorHtml = errors.length
-    ? `<article class="bucket error-bucket">
+  const errorHtml =
+    errors.length && !filter
+      ? `<article class="bucket error-bucket">
         <header><h2>Could not load</h2></header>
         <ol>${errors
           .map(
@@ -86,12 +101,17 @@ function renderGroups(data) {
           )
           .join("")}</ol>
       </article>`
+      : "";
+
+  const filterNote = filter
+    ? `<p class="meta">Showing ${filter.replaceAll("_", " ")} only. Tap the group again to show all.</p>`
     : "";
 
   resultEl.classList.remove("hidden");
   resultEl.innerHTML = `
     <p class="meta">${data.ok} grouped · ${data.failed} failed · ${data.total} total</p>
-    ${groupHtml || "<p class='meta'>No sites landed in a tracked group yet.</p>"}
+    ${filterNote}
+    ${groupHtml || "<p class='meta'>No URLs in this group yet.</p>"}
     ${errorHtml}
   `;
 
@@ -135,9 +155,6 @@ function extractUrls(text) {
   return found;
 }
 
-const BATCH_SIZE = 10;
-let runId = 0;
-
 async function readJson(response) {
   const text = await response.text();
   try {
@@ -147,43 +164,76 @@ async function readJson(response) {
   }
 }
 
-function emptyGroups() {
-  return GROUP_ORDER.map((id) => ({ id, items: [] }));
+function addItem(state, item) {
+  const id = item.group?.id || "unknown";
+  let found = false;
+  const groups = state.groups.map((group) => {
+    if (group.id !== id) return group;
+    found = true;
+    return { ...group, ...item.group, items: [...group.items, item] };
+  });
+  if (!found) groups.push({ ...item.group, items: [item] });
+  return { ...state, total: state.total + 1, ok: state.ok + 1, groups };
 }
 
-function mergeBatch(state, batch) {
-  const byId = new Map((state.groups || emptyGroups()).map((group) => [group.id, { ...group, items: [...(group.items || [])] }]));
-  for (const group of batch.groups || []) {
-    if (!byId.has(group.id)) {
-      byId.set(group.id, { ...group, items: [] });
-    }
-    const target = byId.get(group.id);
-    if (!target.label && group.label) Object.assign(target, group, { items: target.items });
-    target.items.push(...(group.items || []));
-  }
+function addError(state, url, error) {
   return {
-    total: state.total + (batch.total || 0),
-    ok: state.ok + (batch.ok || 0),
-    failed: state.failed + (batch.failed || 0),
-    groups: [...byId.values()],
-    errors: [...(state.errors || []), ...(batch.errors || [])],
+    ...state,
+    total: state.total + 1,
+    failed: state.failed + 1,
+    errors: [...state.errors, { url, error }],
   };
 }
 
-function chunk(values, size) {
-  const out = [];
-  for (let i = 0; i < values.length; i += size) {
-    out.push(values.slice(i, i + size));
-  }
-  return out;
+function threadCount() {
+  const n = Number(threadsInput.value);
+  if (!Number.isFinite(n)) return 8;
+  return Math.min(16, Math.max(1, Math.round(n)));
 }
+
+function stopScan(message = "Stopped.") {
+  runId += 1;
+  for (const controller of controllers) controller.abort();
+  controllers = [];
+  submit.disabled = false;
+  stopBtn.disabled = true;
+  showStatus(message);
+}
+
+async function runPool(urls, threads, worker) {
+  let next = 0;
+  async function thread() {
+    while (true) {
+      const index = next;
+      next += 1;
+      if (index >= urls.length) return;
+      await worker(urls[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(threads, urls.length) }, thread));
+}
+
+document.querySelectorAll(".chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    const id = chip.dataset.group;
+    activeFilter = activeFilter === id ? null : id;
+    renderGroups(lastState);
+  });
+});
+
+stopBtn.addEventListener("click", () => stopScan("Stopped. Partial results are kept."));
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const thisRun = ++runId;
+  for (const controller of controllers) controller.abort();
+  controllers = [];
+  activeFilter = null;
+  lastState = { total: 0, ok: 0, failed: 0, groups: emptyGroups(), errors: [] };
   resultEl.classList.add("hidden");
   setCounts([]);
   submit.disabled = true;
+  stopBtn.disabled = false;
 
   try {
     const urls = extractUrls(input.value);
@@ -191,34 +241,50 @@ form.addEventListener("submit", async (event) => {
       throw new Error("Paste at least one URL.");
     }
 
-    showStatus(`Scanning 0 / ${urls.length}…`);
-    let state = { total: 0, ok: 0, failed: 0, groups: emptyGroups(), errors: [] };
+    const threads = threadCount();
+    showStatus(`Scanning 0 / ${urls.length} with ${threads} threads…`);
+    renderGroups(lastState);
 
-    for (const batch of chunk(urls, BATCH_SIZE)) {
+    await runPool(urls, threads, async (url) => {
       if (thisRun !== runId) return;
-      const response = await fetch("/api/detect-bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls: batch }),
-      });
-      const data = await readJson(response);
-      if (!response.ok) {
-        throw new Error(data.error || "Detection failed");
+      const controller = new AbortController();
+      controllers.push(controller);
+      try {
+        const response = await fetch("/api/detect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+          signal: controller.signal,
+        });
+        const data = await readJson(response);
+        if (thisRun !== runId) return;
+        lastState = response.ok
+          ? addItem(lastState, data)
+          : addError(lastState, url, data.error || "Detection failed");
+      } catch (error) {
+        if (thisRun !== runId || error.name === "AbortError") return;
+        lastState = addError(lastState, url, error.message || "Could not analyze that site");
+      } finally {
+        controllers = controllers.filter((item) => item !== controller);
       }
-      state = mergeBatch(state, data);
-      renderGroups(state);
-      showStatus(`Scanning ${state.total} / ${urls.length}…`);
-    }
+      if (thisRun === runId) {
+        renderGroups(lastState);
+        showStatus(`Scanning ${lastState.total} / ${urls.length} with ${threads} threads…`);
+      }
+    });
 
     if (thisRun !== runId) return;
-    if (!state.ok && state.failed) {
-      showStatus(`None of the ${state.total} URLs could be loaded.`, true);
+    if (!lastState.ok && lastState.failed) {
+      showStatus(`None of the ${lastState.total} URLs could be loaded.`, true);
     } else {
-      showStatus(`Done. ${state.ok} grouped · ${state.failed} failed · ${state.total} total.`);
+      showStatus(`Done. ${lastState.ok} grouped · ${lastState.failed} failed · ${lastState.total} total.`);
     }
   } catch (error) {
     if (thisRun === runId) showStatus(error.message, true);
   } finally {
-    if (thisRun === runId) submit.disabled = false;
+    if (thisRun === runId) {
+      submit.disabled = false;
+      stopBtn.disabled = true;
+    }
   }
 });

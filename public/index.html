@@ -13,9 +13,10 @@
         <p class="eyebrow">URL classifier</p>
         <h1>Paste URLs. See them in seller groups.</h1>
         <p class="lede">
-          Paste as many URLs as you want. The detector visits each page in batches
-          and sorts them into gift cards / games / CD keys / top-up, eSIM, clothes,
-          VPS / servers, casino / gambling, or donation.
+          Paste as many URLs as you want. Parallel threads visit each page and
+          sort them into gift cards / games / CD keys / top-up, eSIM, clothes,
+          VPS / servers, casino / gambling, or donation. Tap a group to see only
+          those URLs.
         </p>
       </header>
 
@@ -29,42 +30,49 @@
           placeholder="https://example.com&#10;https://another-shop.com&#10;shop3.com"
         ></textarea>
         <div class="row actions">
-          <p class="hint">No limit. One per line, or separated by spaces or commas.</p>
-          <button type="submit" id="submit">Detect all</button>
+          <label class="threads">
+            Threads
+            <input id="threads" type="number" min="1" max="16" value="8" />
+          </label>
+          <p class="hint">No limit. One per line. Tap a group to filter.</p>
+          <div class="buttons">
+            <button type="submit" id="submit">Detect all</button>
+            <button type="button" id="stop" class="stop" disabled>Stop</button>
+          </div>
         </div>
       </form>
 
       <section class="groups" aria-label="Tracked groups">
-        <article class="chip" data-group="digital_goods">
+        <button type="button" class="chip" data-group="digital_goods">
           <span class="dot"></span>
           <span>Gift cards / Games / CD keys / Top-up</span>
           <strong class="count" data-count="digital_goods">0</strong>
-        </article>
-        <article class="chip" data-group="esim">
+        </button>
+        <button type="button" class="chip" data-group="esim">
           <span class="dot"></span>
           <span>eSIM</span>
           <strong class="count" data-count="esim">0</strong>
-        </article>
-        <article class="chip" data-group="clothing">
+        </button>
+        <button type="button" class="chip" data-group="clothing">
           <span class="dot"></span>
           <span>Clothes</span>
           <strong class="count" data-count="clothing">0</strong>
-        </article>
-        <article class="chip" data-group="hosting">
+        </button>
+        <button type="button" class="chip" data-group="hosting">
           <span class="dot"></span>
           <span>VPS / Servers</span>
           <strong class="count" data-count="hosting">0</strong>
-        </article>
-        <article class="chip" data-group="gambling">
+        </button>
+        <button type="button" class="chip" data-group="gambling">
           <span class="dot"></span>
           <span>Casino / Gambling</span>
           <strong class="count" data-count="gambling">0</strong>
-        </article>
-        <article class="chip" data-group="donation">
+        </button>
+        <button type="button" class="chip" data-group="donation">
           <span class="dot"></span>
           <span>Donation</span>
           <strong class="count" data-count="donation">0</strong>
-        </article>
+        </button>
       </section>
 
       <section id="status" class="status hidden" aria-live="polite"></section>

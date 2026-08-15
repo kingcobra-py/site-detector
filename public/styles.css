@@ -85,11 +85,36 @@ body {
 .actions {
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   margin-top: 12px;
 }
 
 .actions .hint {
   margin: 0;
+  flex: 1;
+}
+
+.threads {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.threads input {
+  width: 72px;
+  flex: none;
+}
+
+.buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.stop {
+  background: #3a2230;
+  color: #ffb3c0;
 }
 
 textarea,
@@ -136,7 +161,19 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #111821;
+  color: var(--text);
   font-size: 0.92rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chip.dim {
+  opacity: 0.45;
+}
+
+.chip.selected {
+  outline: 2px solid var(--match, var(--accent));
 }
 
 .chip .count {
