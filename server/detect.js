@@ -2,8 +2,7 @@ import { classifyPage } from "./classify.js";
 import { fetchPage, normalizeUrl } from "./fetchPage.js";
 import { GROUPS, UNKNOWN_GROUP, groupById } from "./groups.js";
 
-export const MAX_BULK_URLS = 40;
-const CONCURRENCY = 5;
+const CONCURRENCY = 6;
 
 function cleanCandidate(value) {
   return String(value || "")
@@ -33,7 +32,7 @@ export function extractUrlCandidates(input) {
   return [...new Set([...fromLines, ...fromLinks])];
 }
 
-export function parseUrlList(input, { max = MAX_BULK_URLS } = {}) {
+export function parseUrlList(input) {
   const raw = extractUrlCandidates(input);
 
   const seen = new Set();
@@ -51,12 +50,6 @@ export function parseUrlList(input, { max = MAX_BULK_URLS } = {}) {
     } catch (error) {
       invalid.push({ url: trimmed, error: error.message });
     }
-  }
-
-  if (urls.length > max) {
-    const error = new Error(`At most ${max} URLs per batch`);
-    error.code = "TOO_MANY";
-    throw error;
   }
 
   return { urls, invalid };

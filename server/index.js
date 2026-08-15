@@ -10,7 +10,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 
 const app = express();
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "10mb" }));
 app.use(express.static(path.join(__dirname, "../public")));
 
 app.get("/api/groups", (_req, res) => {
@@ -38,8 +38,7 @@ app.post("/api/detect-bulk", async (req, res) => {
   try {
     res.json(await detectMany(input));
   } catch (error) {
-    const status = error.code === "TOO_MANY" ? 400 : 502;
-    res.status(status).json({ error: error.message || "Could not analyze those sites" });
+    res.status(502).json({ error: error.message || "Could not analyze those sites" });
   }
 });
 
@@ -59,7 +58,7 @@ app.use((error, _req, res, next) => {
   const tooLarge = error?.type === "entity.too.large" || error?.status === 413;
   res.status(tooLarge ? 413 : error.status || 500).json({
     error: tooLarge
-      ? "The URL list is too large. Paste up to 40 URLs, one per line."
+      ? "That paste is too large for one request. The page will send URLs in batches — try Detect all again."
       : error.message || "Request failed",
   });
 });

@@ -77,9 +77,10 @@ describe("parseUrlList", () => {
     assert.match(invalid[0].error, /not allowed/);
   });
 
-  it("rejects more than 40 URLs", () => {
+  it("accepts more than 40 URLs", () => {
     const text = Array.from({ length: 41 }, (_, i) => `https://shop${i}.example`).join("\n");
-    assert.throws(() => parseUrlList(text), /At most 40/);
+    const { urls } = parseUrlList(text);
+    assert.equal(urls.length, 41);
   });
 
   it("pulls http URLs out of an HTML dump instead of treating every word as a URL", () => {

@@ -135,50 +135,90 @@ function extractUrls(text) {
   return found;
 }
 
+const BATCH_SIZE = 10;
+let runId = 0;
+
 async function readJson(response) {
   const text = await response.text();
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error(
-      "The server sent a web page instead of results. Paste up to 40 URLs, one per line, and try again.",
-    );
+    throw new Error("The server sent a web page instead of results. Try Detect all again.");
   }
+}
+
+function emptyGroups() {
+  return GROUP_ORDER.map((id) => ({ id, items: [] }));
+}
+
+function mergeBatch(state, batch) {
+  const byId = new Map((state.groups || emptyGroups()).map((group) => [group.id, { ...group, items: [...(group.items || [])] }]));
+  for (const group of batch.groups || []) {
+    if (!byId.has(group.id)) {
+      byId.set(group.id, { ...group, items: [] });
+    }
+    const target = byId.get(group.id);
+    if (!target.label && group.label) Object.assign(target, group, { items: target.items });
+    target.items.push(...(group.items || []));
+  }
+  return {
+    total: state.total + (batch.total || 0),
+    ok: state.ok + (batch.ok || 0),
+    failed: state.failed + (batch.failed || 0),
+    groups: [...byId.values()],
+    errors: [...(state.errors || []), ...(batch.errors || [])],
+  };
+}
+
+function chunk(values, size) {
+  const out = [];
+  for (let i = 0; i < values.length; i += size) {
+    out.push(values.slice(i, i + size));
+  }
+  return out;
 }
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const thisRun = ++runId;
   resultEl.classList.add("hidden");
   setCounts([]);
   submit.disabled = true;
-  showStatus("Loading the URLs and sorting them into groups…");
 
   try {
     const urls = extractUrls(input.value);
     if (!urls.length) {
       throw new Error("Paste at least one URL.");
     }
-    if (urls.length > 40) {
-      throw new Error(`Paste at most 40 URLs. You entered ${urls.length}.`);
+
+    showStatus(`Scanning 0 / ${urls.length}…`);
+    let state = { total: 0, ok: 0, failed: 0, groups: emptyGroups(), errors: [] };
+
+    for (const batch of chunk(urls, BATCH_SIZE)) {
+      if (thisRun !== runId) return;
+      const response = await fetch("/api/detect-bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ urls: batch }),
+      });
+      const data = await readJson(response);
+      if (!response.ok) {
+        throw new Error(data.error || "Detection failed");
+      }
+      state = mergeBatch(state, data);
+      renderGroups(state);
+      showStatus(`Scanning ${state.total} / ${urls.length}…`);
     }
 
-    const response = await fetch("/api/detect-bulk", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ urls }),
-    });
-    const data = await readJson(response);
-    if (!response.ok) {
-      throw new Error(data.error || "Detection failed");
-    }
-    hideStatus();
-    renderGroups(data);
-    if (!data.ok && data.failed) {
-      showStatus(`None of the ${data.total} URLs could be loaded.`, true);
+    if (thisRun !== runId) return;
+    if (!state.ok && state.failed) {
+      showStatus(`None of the ${state.total} URLs could be loaded.`, true);
+    } else {
+      showStatus(`Done. ${state.ok} grouped · ${state.failed} failed · ${state.total} total.`);
     }
   } catch (error) {
-    showStatus(error.message, true);
+    if (thisRun === runId) showStatus(error.message, true);
   } finally {
-    submit.disabled = false;
+    if (thisRun === runId) submit.disabled = false;
   }
 });
