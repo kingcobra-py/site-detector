@@ -181,7 +181,7 @@ async function runJob(job) {
   job.updatedAt = Date.now();
   await persistMeta(job);
 
-  const threads = Math.min(16, Math.max(1, job.threads || 8));
+  const threads = Math.max(1, job.threads || 8);
   let next = job.cursor || 0;
 
   async function worker() {
@@ -222,6 +222,14 @@ async function runJob(job) {
   if (activeJobId === job.id) activeJobId = job.status === "running" ? job.id : job.id;
 }
 
+export function resolveThreads(requested, urlCount) {
+  const count = Math.max(1, urlCount || 1);
+  if (requested === 0 || requested === "unlimited" || requested === "0") return count;
+  const n = Number(requested);
+  if (!Number.isFinite(n) || n < 1) return Math.min(8, count);
+  return Math.max(1, Math.round(n));
+}
+
 export async function createJob({ text, urls, threads = 8 }) {
   const parsed = parseUrlList(urls || text);
   const allUrls = parsed.urls;
@@ -251,7 +259,7 @@ export async function createJob({ text, urls, threads = 8 }) {
     processed: parsed.invalid.length,
     ok: 0,
     failed: parsed.invalid.length,
-    threads: Math.min(16, Math.max(1, Number(threads) || 8)),
+    threads: resolveThreads(threads, allUrls.length),
     createdAt: now,
     updatedAt: now,
     cursor: 0,

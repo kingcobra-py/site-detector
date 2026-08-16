@@ -1,6 +1,7 @@
 const form = document.querySelector("#detect-form");
 const input = document.querySelector("#urls");
 const threadsInput = document.querySelector("#threads");
+const unlimitedThreads = document.querySelector("#unlimited-threads");
 const submit = document.querySelector("#submit");
 const stopBtn = document.querySelector("#stop");
 const statusEl = document.querySelector("#status");
@@ -36,10 +37,15 @@ function escapeHtml(value) {
 }
 
 function threadCount() {
+  if (unlimitedThreads?.checked) return 0;
   const n = Number(threadsInput.value);
-  if (!Number.isFinite(n)) return 8;
-  return Math.min(16, Math.max(1, Math.round(n)));
+  if (!Number.isFinite(n) || n < 1) return 8;
+  return Math.round(n);
 }
+
+unlimitedThreads?.addEventListener("change", () => {
+  threadsInput.disabled = unlimitedThreads.checked;
+});
 
 function setCounts(counts) {
   document.querySelectorAll("[data-count]").forEach((el) => {
@@ -76,7 +82,7 @@ function renderJob(job, page) {
 
   const label =
     job.status === "running"
-      ? `Scanning ${job.processed} / ${job.queued} with ${job.threads} server threads. Results stay on this site.`
+      ? `Scanning ${job.processed} / ${job.queued} with ${job.threads} threads. Results stay on this site.`
       : job.status === "stopping"
         ? `Stopping… ${job.processed} / ${job.queued} saved.`
         : job.status === "stopped"
