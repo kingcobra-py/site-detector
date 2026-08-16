@@ -42,6 +42,19 @@ describe("classifyPage", () => {
     assert.equal(russian.group.id, "digital_goods");
   });
 
+  it("classifies Apple and Xbox shops from the URL when the page is empty", () => {
+    const apple = classifyPage({
+      url: "https://www.apple.com/shop/gift-cards",
+      html: "<html><head><title></title></head><body></body></html>",
+    });
+    const xbox = classifyPage({
+      url: "https://www.xbox.com/en-US/xbox-game-pass",
+      html: "<html></html>",
+    });
+    assert.equal(apple.group.id, "digital_goods");
+    assert.equal(xbox.group.id, "digital_goods");
+  });
+
   it("detects eSIM stores", () => {
     const result = classifyPage(page("Travel eSIM data plans", "Activate eSIM with QR code. Airalo alternative."));
     assert.equal(result.group.id, "esim");

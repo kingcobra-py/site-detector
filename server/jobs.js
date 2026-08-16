@@ -58,7 +58,6 @@ async function persistMeta(job) {
   const meta = {
     id: job.id,
     status: job.status,
-    urls: job.urls,
     total: job.total,
     processed: job.processed,
     ok: job.ok,
@@ -72,6 +71,11 @@ async function persistMeta(job) {
   };
   await writeFile(path.join(jobDir(job.id), "meta.json"), JSON.stringify(meta));
   await writeFile(path.join(DATA_DIR, "latest"), job.id);
+}
+
+async function persistUrls(job) {
+  await mkdir(jobDir(job.id), { recursive: true });
+  await writeFile(path.join(jobDir(job.id), "urls.json"), JSON.stringify(job.urls));
 }
 
 async function persistItem(job, item) {
@@ -108,10 +112,17 @@ export async function loadJobsFromDisk() {
   for (const id of ids) {
     try {
       const meta = JSON.parse(await readFile(path.join(jobDir(id), "meta.json"), "utf8"));
+      let urls = meta.urls || [];
+      try {
+        urls = JSON.parse(await readFile(path.join(jobDir(id), "urls.json"), "utf8"));
+      } catch {
+        urls = meta.urls || [];
+      }
       const items = await readJsonl(path.join(jobDir(id), "items.jsonl"));
       const errors = await readJsonl(path.join(jobDir(id), "errors.jsonl"));
       const job = {
         ...meta,
+        urls,
         items,
         errors,
         counts: meta.counts || emptyCounts(),
@@ -266,6 +277,7 @@ export async function createJob({ text, urls, threads = 8 }) {
     stopRequested: false,
   };
   jobs.set(id, job);
+  await persistUrls(job);
   await persistMeta(job);
   for (const failed of job.errors) await persistError(job, failed);
   runJob(job).catch((error) => {

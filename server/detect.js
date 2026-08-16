@@ -72,9 +72,24 @@ export function summarizeResult(page, result) {
 }
 
 export async function detectOne(input) {
-  const page = await fetchPage(input);
-  const result = classifyPage({ html: page.html, url: page.url });
-  return summarizeResult(page, result);
+  const requestedUrl = normalizeUrl(input);
+  try {
+    const page = await fetchPage(input);
+    return summarizeResult(page, classifyPage({ html: page.html, url: page.url }));
+  } catch (error) {
+    const result = classifyPage({ html: "", url: requestedUrl });
+    if (result.group.id !== "unknown") {
+      return summarizeResult(
+        {
+          requestedUrl,
+          url: requestedUrl,
+          status: 0,
+        },
+        result,
+      );
+    }
+    throw error;
+  }
 }
 
 export function groupResults(items, errors = []) {

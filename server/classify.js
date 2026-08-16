@@ -65,14 +65,17 @@ export function extractSignals(html, url = "") {
     .join(" ");
 
   let hostname = "";
+  let urlText = "";
   try {
-    hostname = new URL(url).hostname.replace(/^www\./, "");
+    const parsed = new URL(url);
+    hostname = parsed.hostname.replace(/^www\./, "");
+    urlText = `${parsed.hostname} ${parsed.pathname} ${parsed.search}`.replace(/[/?#=&._-]+/g, " ");
   } catch {
     hostname = "";
   }
 
   const body = normalizeText($("body").text() || raw).slice(0, 80_000);
-  const focused = normalizeText([title, description, keywords, headings, hostname].join(" "));
+  const focused = normalizeText([title, description, keywords, headings, hostname, urlText].join(" "));
 
   return {
     title: normalizeText(title),

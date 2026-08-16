@@ -1,9 +1,24 @@
-import { lookup } from "node:dns/promises";
+import { lookup, setDefaultResultOrder } from "node:dns/promises";
 import { isIP } from "node:net";
+import { Agent, fetch as undiciFetch } from "undici";
+
+setDefaultResultOrder("ipv4first");
 
 const MAX_BYTES = 1_500_000;
-const TIMEOUT_MS = 12_000;
-const MAX_REDIRECTS = 4;
+const TIMEOUT_MS = 15_000;
+const MAX_REDIRECTS = 5;
+
+const dispatcher = new Agent({
+  connections: 64,
+  pipelining: 1,
+  keepAliveTimeout: 10_000,
+  connect: {
+    rejectUnauthorized: false,
+    timeout: 8_000,
+  },
+  headersTimeout: TIMEOUT_MS,
+  bodyTimeout: TIMEOUT_MS,
+});
 
 const BLOCKED_HOSTS = new Set(["localhost", "metadata.google.internal"]);
 
@@ -67,98 +82,117 @@ export function normalizeUrl(input) {
   return parsed.toString();
 }
 
+function fetchErrorMessage(error) {
+  const cause = error?.cause;
+  const code = cause?.code || error?.code;
+  if (error?.name === "AbortError" || code === "UND_ERR_ABORTED") return "Timed out while loading the site";
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN") return "Domain not found";
+  if (code === "ECONNREFUSED") return "Connection refused";
+  if (code === "ECONNRESET") return "Connection reset";
+  if (code === "ETIMEDOUT" || code === "UND_ERR_CONNECT_TIMEOUT") return "Timed out while connecting";
+  if (code === "CERT_HAS_EXPIRED" || code === "DEPTH_ZERO_SELF_SIGNED_CERT" || code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE") {
+    return "TLS certificate error";
+  }
+  return cause?.message || error.message || "Could not load the page";
+}
+
 async function assertPublicHost(hostname) {
   if (isIP(hostname)) {
     if (isPrivateIp(hostname)) throw new Error("Private or local addresses are not allowed");
     return;
   }
-  const records = await lookup(hostname, { all: true });
+  const records = await lookup(hostname, { all: true, verbatim: false });
   if (!records.length) throw new Error("Could not resolve that host");
-  for (const record of records) {
-    if (isPrivateIp(record.address)) {
-      throw new Error("Private or local addresses are not allowed");
+  const publicRecords = records.filter((record) => !isPrivateIp(record.address));
+  if (!publicRecords.length) {
+    throw new Error("Private or local addresses are not allowed");
+  }
+}
+
+async function fetchOnce(current) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const response = await undiciFetch(current, {
+      method: "GET",
+      redirect: "follow",
+      maxRedirections: MAX_REDIRECTS,
+      signal: controller.signal,
+      dispatcher,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+
+    if (!response.ok && response.status !== 403 && response.status !== 401) {
+      throw new Error(`Site returned HTTP ${response.status}`);
     }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (
+      contentType &&
+      !/text\/html|application\/xhtml|text\/plain|application\/xml|application\/json/i.test(contentType)
+    ) {
+      return {
+        url: String(response.url || current),
+        status: response.status,
+        contentType,
+        html: "",
+      };
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      return { url: String(response.url || current), status: response.status, contentType, html: "" };
+    }
+
+    const chunks = [];
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > MAX_BYTES) {
+        await reader.cancel();
+        break;
+      }
+      chunks.push(value);
+    }
+
+    return {
+      url: String(response.url || current),
+      status: response.status,
+      contentType,
+      html: Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8"),
+    };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 export async function fetchPage(inputUrl) {
   const startUrl = normalizeUrl(inputUrl);
-  let current = startUrl;
+  const parsed = new URL(startUrl);
+  await assertPublicHost(parsed.hostname);
+
   let lastError = "Could not load the page";
-
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    const parsed = new URL(current);
-    await assertPublicHost(parsed.hostname);
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const response = await fetch(current, {
-        method: "GET",
-        redirect: "manual",
-        signal: controller.signal,
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-      });
-
-      if ([301, 302, 303, 307, 308].includes(response.status)) {
-        const location = response.headers.get("location");
-        if (!location) throw new Error("Redirect without a location");
-        current = new URL(location, current).toString();
-        continue;
-      }
-
-      if (!response.ok) {
-        throw new Error(`Site returned HTTP ${response.status}`);
-      }
-
-      const contentType = response.headers.get("content-type") || "";
-      if (
-        contentType &&
-        !/text\/html|application\/xhtml|text\/plain|application\/xml/i.test(contentType)
-      ) {
-        throw new Error("That URL did not return an HTML page");
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("Empty response from site");
-
-      const chunks = [];
-      let received = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        received += value.byteLength;
-        if (received > MAX_BYTES) {
-          await reader.cancel();
-          break;
-        }
-        chunks.push(value);
-      }
-
-      const html = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
+      const page = await fetchOnce(startUrl);
       return {
-        url: current,
+        url: page.url,
         requestedUrl: startUrl,
-        status: response.status,
-        contentType,
-        html,
+        status: page.status,
+        contentType: page.contentType,
+        html: page.html,
       };
     } catch (error) {
-      if (error?.name === "AbortError") {
-        lastError = "Timed out while loading the site";
-      } else {
-        lastError = error.message || lastError;
-      }
-      throw new Error(lastError);
-    } finally {
-      clearTimeout(timer);
+      lastError = fetchErrorMessage(error);
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }
-
-  throw new Error("Too many redirects");
+  throw new Error(lastError);
 }
