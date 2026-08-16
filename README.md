@@ -18,7 +18,7 @@ npm install
 npm start
 ```
 
-Open http://localhost:3000, paste any number of URLs (one per line), and click **Detect all**. Results are shown in seller groups as each batch finishes.
+Open http://localhost:3000, paste any number of URLs (one per line), and click **Detect all**. The server scans in the background and keeps grouped results on the site, so a 50k list survives refresh.
 
 The server visits the page (so the browser does not hit CORS), reads title, meta description, headings, and body text, then scores keyword signals for each group. Gift-card and video-game detection includes English plus Spanish, French, German, Portuguese, Italian, Turkish, Russian, Arabic, Chinese, Japanese, Korean, and similar phrasing. Accents are folded so `jeux vidéo` still matches.
 
