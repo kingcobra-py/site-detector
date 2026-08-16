@@ -7,11 +7,13 @@ import { GROUPS, UNKNOWN_GROUP } from "./groups.js";
 import {
   clearFailed,
   createJob,
+  resumeJob,
   getJob,
   getJobItems,
   getJobUrls,
   getLatestJob,
   loadJobsFromDisk,
+  resumeIncompleteJobs,
   stopJob,
 } from "./jobs.js";
 
@@ -84,6 +86,15 @@ app.post("/api/jobs/:id/stop", (req, res) => {
   res.json(job);
 });
 
+app.post("/api/jobs/:id/resume", (req, res) => {
+  const job = resumeJob(req.params.id);
+  if (!job) {
+    res.status(404).json({ error: "Scan not found" });
+    return;
+  }
+  res.json(job);
+});
+
 app.post("/api/jobs", async (req, res) => {
   try {
     const body = req.body || {};
@@ -146,6 +157,10 @@ app.use((error, _req, res, next) => {
 });
 
 await loadJobsFromDisk();
+const resumed = resumeIncompleteJobs();
+if (resumed.length) {
+  console.log(`Resumed ${resumed.length} unfinished scan(s)`);
+}
 app.listen(PORT, HOST, () => {
   console.log(`Site detector running on http://${HOST}:${PORT}`);
 });

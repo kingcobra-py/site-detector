@@ -82,6 +82,14 @@ export function normalizeUrl(input) {
   return parsed.toString();
 }
 
+export function isUserStop(signal, error) {
+  return Boolean(signal?.aborted) || error?.code === "STOPPED";
+}
+
+function stoppedError() {
+  return Object.assign(new Error("Stopped"), { code: "STOPPED" });
+}
+
 function fetchErrorMessage(error) {
   const cause = error?.cause;
   const code = cause?.code || error?.code;
@@ -194,7 +202,7 @@ export async function fetchPage(inputUrl, { signal } = {}) {
 
   let lastError = "Could not load the page";
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    if (signal?.aborted) throw new Error("Stopped");
+    if (signal?.aborted) throw stoppedError();
     try {
       const page = await fetchOnce(startUrl, signal);
       return {
@@ -205,7 +213,7 @@ export async function fetchPage(inputUrl, { signal } = {}) {
         html: page.html,
       };
     } catch (error) {
-      if (signal?.aborted || error?.name === "AbortError") throw new Error("Stopped");
+      if (isUserStop(signal, error)) throw stoppedError();
       lastError = fetchErrorMessage(error);
       if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 250));
     }

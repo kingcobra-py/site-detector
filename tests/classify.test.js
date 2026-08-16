@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { classifyPage } from "../server/classify.js";
 import { extractUrlCandidates, groupResults, parseUrlList } from "../server/detect.js";
-import { isPrivateIp, normalizeUrl } from "../server/fetchPage.js";
+import { isPrivateIp, isUserStop, normalizeUrl } from "../server/fetchPage.js";
 
 function page(title, extra = "") {
   return {
@@ -156,6 +156,13 @@ describe("isPrivateIp", () => {
     assert.equal(isPrivateIp("104.20.23.154"), false);
     assert.equal(isPrivateIp("172.66.147.243"), false);
     assert.equal(isPrivateIp("2606:4700:10::6814:179a"), false);
+  });
+
+  it("does not treat a fetch timeout abort as a user Stop", () => {
+    assert.equal(isUserStop(undefined, { name: "AbortError" }), false);
+    assert.equal(isUserStop({ aborted: false }, { name: "AbortError" }), false);
+    assert.equal(isUserStop({ aborted: true }, { name: "AbortError" }), true);
+    assert.equal(isUserStop(undefined, { code: "STOPPED", message: "Stopped" }), true);
   });
 
   it("blocks loopback, RFC1918, and link-local", () => {

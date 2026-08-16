@@ -68,6 +68,7 @@ async function persistMeta(job) {
     error: job.error || null,
     counts: job.counts,
     cursor: job.cursor,
+    stopRequested: Boolean(job.stopRequested),
   };
   await writeFile(path.join(jobDir(job.id), "meta.json"), JSON.stringify(meta));
   await writeFile(path.join(DATA_DIR, "latest"), job.id);
@@ -127,10 +128,15 @@ export async function loadJobsFromDisk() {
         errors,
         counts: meta.counts || emptyCounts(),
         cursor: meta.cursor || items.length + errors.length,
-        stopRequested: false,
+        stopRequested: Boolean(meta.stopRequested) && meta.status !== "running",
         abortControllers: new Set(),
+        running: false,
       };
+      const leftover = urls.length - (job.cursor || 0);
+      const crashed = meta.status === "running";
+      const unfinishedDone = meta.status === "done" && leftover > 0;
       if (job.status === "running") job.status = "stopped";
+      job.resumeOnLoad = crashed || unfinishedDone;
       jobs.set(id, job);
     } catch {
       // skip broken job folders
@@ -231,8 +237,44 @@ export function stopJob(id) {
   return publicJob(job);
 }
 
+export function resumeJob(id) {
+  const job = jobs.get(id);
+  if (!job) return null;
+  if (job.running || job.status === "running") return publicJob(job);
+  if ((job.cursor || 0) >= (job.urls?.length || 0)) {
+    job.status = "done";
+    persistMeta(job).catch(() => {});
+    return publicJob(job);
+  }
+  job.stopRequested = false;
+  job.error = null;
+  job.restarts = 0;
+  job.status = "queued";
+  persistMeta(job).catch(() => {});
+  runJob(job).catch((error) => {
+    job.running = false;
+    job.status = "error";
+    job.error = error.message;
+  });
+  return publicJob(job);
+}
+
+export function resumeIncompleteJobs() {
+  const resumed = [];
+  for (const job of jobs.values()) {
+    if (!job.resumeOnLoad) continue;
+    delete job.resumeOnLoad;
+    resumeJob(job.id);
+    resumed.push(job.id);
+  }
+  return resumed;
+}
+
 async function runJob(job) {
+  if (job.running) return;
+  job.running = true;
   activeJobId = job.id;
+  job.stopRequested = false;
   job.status = "running";
   job.updatedAt = Date.now();
   await persistMeta(job);
@@ -259,7 +301,7 @@ async function runJob(job) {
         job.counts[result.groupId] = (job.counts[result.groupId] || 0) + 1;
         await persistItem(job, result);
       } catch (error) {
-        if (job.stopRequested || error.code === "STOPPED" || error.message === "Stopped") return;
+        if (job.stopRequested || error.code === "STOPPED") return;
         const failed = { url, error: error.message || "Could not analyze that site" };
         job.errors.push(failed);
         job.failed += 1;
@@ -268,22 +310,38 @@ async function runJob(job) {
         job.abortControllers.delete(controller);
       }
       job.processed += 1;
-      job.cursor = Math.max(job.cursor, index + 1);
+      job.cursor = Math.max(job.cursor || 0, index + 1);
       job.updatedAt = Date.now();
       if (job.processed % 25 === 0) await persistMeta(job);
     }
   }
 
   try {
-    await Promise.all(Array.from({ length: Math.min(threads, job.urls.length) }, worker));
-    job.status = job.stopRequested ? "stopped" : "done";
+    const leftover = Math.max(0, job.urls.length - next);
+    await Promise.all(Array.from({ length: Math.min(threads, leftover || job.urls.length) }, worker));
+    if (job.stopRequested) {
+      job.status = "stopped";
+    } else if ((job.cursor || 0) >= job.urls.length) {
+      job.status = "done";
+    } else {
+      job.restarts = (job.restarts || 0) + 1;
+      if (job.restarts > 20) {
+        job.status = "error";
+        job.error = "Scan workers stopped before finishing. Click Resume to continue.";
+      } else {
+        job.running = false;
+        job.updatedAt = Date.now();
+        await persistMeta(job);
+        return runJob(job);
+      }
+    }
   } catch (error) {
     job.status = "error";
     job.error = error.message;
   }
+  job.running = false;
   job.updatedAt = Date.now();
   await persistMeta(job);
-  if (activeJobId === job.id) activeJobId = job.status === "running" ? job.id : job.id;
 }
 
 export function resolveThreads(requested, urlCount) {
@@ -329,6 +387,7 @@ export async function createJob({ text, urls, threads = 8 }) {
     cursor: 0,
     stopRequested: false,
     abortControllers: new Set(),
+    running: false,
   };
   jobs.set(id, job);
   await persistUrls(job);

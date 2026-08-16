@@ -1,5 +1,5 @@
 import { classifyPage } from "./classify.js";
-import { fetchPage, normalizeUrl } from "./fetchPage.js";
+import { fetchPage, isUserStop, normalizeUrl } from "./fetchPage.js";
 import { GROUPS, UNKNOWN_GROUP, groupById } from "./groups.js";
 
 const CONCURRENCY = 6;
@@ -77,10 +77,8 @@ export async function detectOne(input, { signal } = {}) {
     const page = await fetchPage(input, { signal });
     return summarizeResult(page, classifyPage({ html: page.html, url: page.url }));
   } catch (error) {
-    if (signal?.aborted || error.message === "Stopped") {
-      const stopped = new Error("Stopped");
-      stopped.code = "STOPPED";
-      throw stopped;
+    if (isUserStop(signal, error)) {
+      throw Object.assign(new Error("Stopped"), { code: "STOPPED" });
     }
     const result = classifyPage({ html: "", url: requestedUrl });
     if (result.group.id !== "unknown") {

@@ -64,9 +64,15 @@ function setCounts(counts, failed = 0) {
   });
 }
 
-function setRunning(running) {
+function canResume(job) {
+  return Boolean(job && job.status !== "running" && job.status !== "queued" && job.status !== "stopping" && job.processed < job.queued);
+}
+
+function setRunning(running, job = currentJob) {
   submit.disabled = running;
-  stopBtn.classList.toggle("idle", !running);
+  const resume = !running && canResume(job);
+  stopBtn.classList.toggle("idle", !running && !resume);
+  stopBtn.textContent = running ? "Stop" : resume ? "Resume" : "Stop";
 }
 
 async function readJson(response) {
@@ -81,18 +87,21 @@ async function readJson(response) {
 function renderJob(job, page) {
   currentJob = job;
   setCounts(job.counts, job.failed);
-  setRunning(job.status === "running" || job.status === "queued" || job.status === "stopping");
+  setRunning(job.status === "running" || job.status === "queued" || job.status === "stopping", job);
 
+  const stalled = job.processed < job.queued && job.status !== "running" && job.status !== "queued" && job.status !== "stopping";
   const label =
     job.status === "running"
       ? `Scanning ${job.processed} / ${job.queued} with ${job.threads} threads. Results stay on this site.`
       : job.status === "stopping"
         ? `Stopping… ${job.processed} / ${job.queued} saved.`
         : job.status === "stopped"
-          ? `Stopped. ${job.ok} grouped · ${job.failed} failed · ${job.processed} / ${job.queued} saved.`
-          : job.status === "done"
-            ? `Done. ${job.ok} grouped · ${job.failed} failed · ${job.processed} total. Results are saved on the server.`
-            : `${job.status}. ${job.processed} / ${job.queued}`;
+          ? `Stopped. ${job.ok} grouped · ${job.failed} failed · ${job.processed} / ${job.queued} saved. Click Resume to continue.`
+          : stalled
+            ? `Scan stalled at ${job.processed} / ${job.queued}. Click Resume to continue from where it left off.`
+            : job.status === "done"
+              ? `Done. ${job.ok} grouped · ${job.failed} failed · ${job.processed} total. Results are saved on the server.`
+              : `${job.status}. ${job.processed} / ${job.queued}`;
   showStatus(job.error || label, Boolean(job.error));
 
   const filter = activeFilter;
@@ -258,7 +267,6 @@ document.querySelectorAll(".chip").forEach((chip) => {
 });
 
 stopBtn.addEventListener("click", async () => {
-  showStatus("Stopping… cancelling in-flight checks.");
   try {
     let id = currentJob?.id;
     if (!id) {
@@ -269,13 +277,23 @@ stopBtn.addEventListener("click", async () => {
       showStatus("No scan is running.", true);
       return;
     }
+    if (canResume(currentJob)) {
+      showStatus("Resuming the saved scan…");
+      const response = await fetch(`/api/jobs/${id}/resume`, { method: "POST" });
+      const job = await readJson(response);
+      if (!response.ok) throw new Error(job.error || "Could not resume");
+      renderJob(job, { items: [], errors: [] });
+      startPolling(job.id);
+      return;
+    }
+    showStatus("Stopping… cancelling in-flight checks.");
     const response = await fetch(`/api/jobs/${id}/stop`, { method: "POST" });
     const job = await readJson(response);
     if (!response.ok) throw new Error(job.error || "Could not stop");
     clearInterval(pollTimer);
     renderJob(job, { items: [], errors: [] });
-    setRunning(false);
-    showStatus(`Stopped. ${job.ok} grouped · ${job.failed} failed · ${job.processed} saved.`);
+    setRunning(false, job);
+    showStatus(`Stopped. ${job.ok} grouped · ${job.failed} failed · ${job.processed} saved. Click Resume to continue.`);
   } catch (error) {
     showStatus(error.message, true);
   }
