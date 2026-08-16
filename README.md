@@ -8,6 +8,7 @@ Web app that loads a URL, fetches the live page, and classifies the site into on
 | eSIM | Travel eSIM and data-plan sellers |
 | Clothes | Apparel and fashion stores |
 | VPS / Servers | VPS, dedicated servers, hosting |
+| Proxies / ISP / Residential | Residential, ISP, mobile, and datacenter proxies |
 | Casino / Gambling | Casinos, sportsbooks, betting |
 | Donation | Charity and fundraising pages |
 

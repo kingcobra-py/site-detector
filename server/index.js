@@ -5,6 +5,7 @@ import { detectMany, detectOne } from "./detect.js";
 import { normalizeUrl } from "./fetchPage.js";
 import { GROUPS, UNKNOWN_GROUP } from "./groups.js";
 import {
+  clearFailed,
   createJob,
   getJob,
   getJobItems,
@@ -58,6 +59,15 @@ app.get("/api/jobs/:id/urls", (req, res) => {
 
 app.get("/api/jobs/:id", (req, res) => {
   const job = getJob(req.params.id);
+  if (!job) {
+    res.status(404).json({ error: "Scan not found" });
+    return;
+  }
+  res.json(job);
+});
+
+app.post("/api/jobs/:id/clear-failed", async (req, res) => {
+  const job = await clearFailed(req.params.id);
   if (!job) {
     res.status(404).json({ error: "Scan not found" });
     return;

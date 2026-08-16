@@ -65,6 +65,13 @@ describe("classifyPage", () => {
     assert.equal(result.group.id, "clothing");
   });
 
+  it("detects residential and ISP proxy sellers", () => {
+    const result = classifyPage(
+      page("Buy residential proxies and ISP IPs", "Rotating residential proxy, SOCKS5, mobile proxies, Bright Data alternative."),
+    );
+    assert.equal(result.group.id, "proxies");
+  });
+
   it("detects VPS and server hosts", () => {
     const result = classifyPage(page("Cloud VPS hosting", "Linux VPS, dedicated servers, KVM VPS, NVMe VPS."));
     assert.equal(result.group.id, "hosting");

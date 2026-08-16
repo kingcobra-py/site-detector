@@ -12,9 +12,11 @@ const GROUP_ORDER = [
   "esim",
   "clothing",
   "hosting",
+  "proxies",
   "gambling",
   "donation",
   "unknown",
+  "failed",
 ];
 
 let activeFilter = null;
@@ -47,13 +49,14 @@ unlimitedThreads?.addEventListener("change", () => {
   threadsInput.disabled = unlimitedThreads.checked;
 });
 
-function setCounts(counts) {
+function setCounts(counts, failed = 0) {
+  const merged = { ...counts, failed };
   document.querySelectorAll("[data-count]").forEach((el) => {
-    el.textContent = String(counts?.[el.dataset.count] || 0);
+    el.textContent = String(merged?.[el.dataset.count] || 0);
   });
   document.querySelectorAll(".chip").forEach((chip) => {
     const id = chip.dataset.group;
-    const n = counts?.[id] || 0;
+    const n = merged?.[id] || 0;
     chip.classList.toggle("active", n > 0);
     chip.classList.toggle("selected", activeFilter === id);
     chip.classList.toggle("dim", Boolean(activeFilter) && activeFilter !== id);
@@ -77,7 +80,7 @@ async function readJson(response) {
 
 function renderJob(job, page) {
   currentJob = job;
-  setCounts(job.counts);
+  setCounts(job.counts, job.failed);
   setRunning(job.status === "running" || job.status === "queued" || job.status === "stopping");
 
   const label =
@@ -93,10 +96,11 @@ function renderJob(job, page) {
   showStatus(job.error || label, Boolean(job.error));
 
   const filter = activeFilter;
+  const failedFilter = filter === "failed";
   const items = page?.items || [];
-  const errors = !filter ? page?.errors || [] : [];
+  const errors = failedFilter ? page?.errors || items : !filter ? page?.errors || [] : [];
   const groupMeta = (job.groups || []).find((group) => group.id === filter);
-  const shown = filter ? groupMeta?.count || items.length : job.ok;
+  const shown = failedFilter ? job.failed : filter ? groupMeta?.count || items.length : job.ok;
 
   const rows = items
     .map((item) => {
@@ -126,8 +130,28 @@ function renderJob(job, page) {
   resultEl.innerHTML = `
     <p class="meta">${job.ok} grouped · ${job.failed} failed · ${job.processed} / ${job.queued} scanned</p>
     ${
-      filter
-        ? `<article class="bucket" data-group="${escapeHtml(filter)}">
+      failedFilter
+        ? `<article class="bucket error-bucket" data-group="failed">
+            <header>
+              <h2>Failed (${job.failed})</h2>
+              <div class="buttons">
+                <button type="button" class="copy" data-copy="failed">Copy URLs</button>
+                <button type="button" class="stop" id="clear-failed">Clear failed</button>
+              </div>
+            </header>
+            <p class="meta">Showing ${errors.length} of ${job.failed}. Clear removes them from this scan.</p>
+            <ol>${
+              errors
+                .map(
+                  (item) =>
+                    `<li><span>${escapeHtml(item.url || item.requestedUrl)}</span><span class="meta">${escapeHtml(item.error || "")}</span></li>`,
+                )
+                .join("") || "<li class='meta'>No failed URLs.</li>"
+            }</ol>
+            ${more}
+          </article>`
+        : filter
+          ? `<article class="bucket" data-group="${escapeHtml(filter)}">
             <header>
               <h2><span class="dot"></span>${escapeHtml(groupMeta?.label || filter)}</h2>
               <button type="button" class="copy" data-copy="${escapeHtml(filter)}">Copy URLs</button>
@@ -136,12 +160,7 @@ function renderJob(job, page) {
             <ol>${rows || "<li class='meta'>No URLs in this group yet.</li>"}</ol>
             ${more}
           </article>`
-        : `<p class="meta">Tap a group above to list its URLs. Large scans stay on the server, so refresh will not wipe them.</p>
-           ${
-             errorRows
-               ? `<article class="bucket error-bucket"><header><h2>Could not load (${job.errorCount})</h2></header><ol>${errorRows}</ol></article>`
-               : ""
-           }`
+          : `<p class="meta">Tap a group above to list its URLs. Tap Failed to review or clear load errors.</p>`
     }
   `;
 
@@ -163,6 +182,18 @@ function renderJob(job, page) {
   resultEl.querySelector("#more")?.addEventListener("click", () => {
     itemOffset += 200;
     loadItems(job.id, filter, itemOffset, true);
+  });
+
+  resultEl.querySelector("#clear-failed")?.addEventListener("click", async () => {
+    const response = await fetch(`/api/jobs/${job.id}/clear-failed`, { method: "POST" });
+    const next = await readJson(response);
+    if (!response.ok) {
+      showStatus(next.error || "Could not clear failed URLs", true);
+      return;
+    }
+    activeFilter = null;
+    await refreshJob(next.id);
+    showStatus(`Cleared failed URLs. ${next.ok} grouped results remain.`);
   });
 }
 
@@ -220,7 +251,7 @@ document.querySelectorAll(".chip").forEach((chip) => {
     activeFilter = activeFilter === id ? null : id;
     itemOffset = 0;
     if (!currentJob) return;
-    setCounts(currentJob.counts);
+    setCounts(currentJob.counts, currentJob.failed);
     if (activeFilter) await loadItems(currentJob.id, activeFilter, 0, false);
     else await refreshJob(currentJob.id);
   });

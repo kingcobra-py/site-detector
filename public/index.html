@@ -15,7 +15,8 @@
         <p class="lede">
           Paste as many URLs as you want, including 50k lists. The server scans
           them in the background and keeps the groups here, so closing the tab
-          does not wipe results. Tap a group to see those URLs.
+          does not wipe results. Tap a group to see those URLs. Tap Failed, then
+          Clear failed, to drop URLs that would not load.
         </p>
       </header>
 
@@ -66,6 +67,11 @@
           <span>VPS / Servers</span>
           <strong class="count" data-count="hosting">0</strong>
         </button>
+        <button type="button" class="chip" data-group="proxies">
+          <span class="dot"></span>
+          <span>Proxies / ISP / Residential</span>
+          <strong class="count" data-count="proxies">0</strong>
+        </button>
         <button type="button" class="chip" data-group="gambling">
           <span class="dot"></span>
           <span>Casino / Gambling</span>
@@ -75,6 +81,11 @@
           <span class="dot"></span>
           <span>Donation</span>
           <strong class="count" data-count="donation">0</strong>
+        </button>
+        <button type="button" class="chip" data-group="failed">
+          <span class="dot"></span>
+          <span>Failed</span>
+          <strong class="count" data-count="failed">0</strong>
         </button>
       </section>
 

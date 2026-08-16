@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createJob, getJob, getJobItems, getJobUrls, resolveThreads, stopJob } from "../server/jobs.js";
+import { clearFailed, createJob, getJob, getJobItems, getJobUrls, resolveThreads, stopJob } from "../server/jobs.js";
 
 describe("jobs", () => {
   it("starts a saved scan and keeps invalid URLs as failures", async () => {
@@ -14,6 +14,9 @@ describe("jobs", () => {
     assert.match(getJobUrls(job.id, "errors"), /127\.0\.0\.1/);
     const stopped = stopJob(job.id);
     assert.ok(["stopped", "stopping", "done"].includes(stopped.status));
+    const cleared = await clearFailed(job.id);
+    assert.equal(cleared.failed, 0);
+    assert.equal(getJobItems(job.id, "failed").errorTotal, 0);
   });
 
   it("treats 0 threads as one worker per URL and does not cap a high thread count", () => {

@@ -11,7 +11,9 @@
   --hosting: #4aa3ff;
   --gambling: #ff5c7a;
   --donation: #c084fc;
+  --proxies: #3dd6d0;
   --unknown: #8b93a7;
+  --failed: #ff5c7a;
 }
 
 * {
@@ -203,6 +205,8 @@ button:disabled {
 .chip[data-group="hosting"] .dot { background: var(--hosting); }
 .chip[data-group="gambling"] .dot { background: var(--gambling); }
 .chip[data-group="donation"] .dot { background: var(--donation); }
+.chip[data-group="proxies"] .dot { background: var(--proxies); }
+.chip[data-group="failed"] .dot { background: var(--failed); }
 
 .status,
 .result {
@@ -318,6 +322,7 @@ button:disabled {
 .bucket[data-group="hosting"] .dot { background: var(--hosting); }
 .bucket[data-group="gambling"] .dot { background: var(--gambling); }
 .bucket[data-group="donation"] .dot { background: var(--donation); }
+.bucket[data-group="proxies"] .dot { background: var(--proxies); }
 .bucket[data-group="unknown"] .dot { background: var(--unknown); }
 
 .error-bucket h2 {

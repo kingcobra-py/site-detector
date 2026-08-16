@@ -148,9 +148,33 @@ export function getJob(id) {
   return job ? publicJob(job) : null;
 }
 
+function isFailedGroup(groupId) {
+  return groupId === "failed" || groupId === "errors";
+}
+
 export function getJobItems(id, groupId, offset = 0, limit = 200) {
   const job = jobs.get(id);
   if (!job) return null;
+  if (isFailedGroup(groupId)) {
+    const errors = job.errors.slice(offset, offset + limit).map((item) => ({
+      requestedUrl: item.url,
+      finalUrl: item.url,
+      title: item.url,
+      hostname: "",
+      confidence: 0,
+      groupId: "failed",
+      error: item.error,
+    }));
+    return {
+      id: job.id,
+      groupId: "failed",
+      total: job.errors.length,
+      offset,
+      items: errors,
+      errors: job.errors.slice(offset, offset + limit),
+      errorTotal: job.errors.length,
+    };
+  }
   const items = groupId ? job.items.filter((item) => item.groupId === groupId) : job.items;
   const errors = groupId ? [] : job.errors;
   return {
@@ -159,7 +183,7 @@ export function getJobItems(id, groupId, offset = 0, limit = 200) {
     total: items.length,
     offset,
     items: items.slice(offset, offset + limit),
-    errors: groupId ? [] : errors.slice(offset, offset + limit),
+    errors: errors.slice(offset, offset + limit),
     errorTotal: errors.length,
   };
 }
@@ -167,13 +191,26 @@ export function getJobItems(id, groupId, offset = 0, limit = 200) {
 export function getJobUrls(id, groupId) {
   const job = jobs.get(id);
   if (!job) return null;
-  if (groupId === "errors") {
+  if (isFailedGroup(groupId)) {
     return job.errors.map((item) => item.url).join("\n");
   }
   return job.items
     .filter((item) => !groupId || item.groupId === groupId)
     .map((item) => item.finalUrl || item.requestedUrl)
     .join("\n");
+}
+
+export async function clearFailed(id) {
+  const job = jobs.get(id);
+  if (!job) return null;
+  const removed = job.errors.length;
+  job.errors = [];
+  job.failed = 0;
+  job.processed = job.ok;
+  job.updatedAt = Date.now();
+  await writeFile(path.join(jobDir(job.id), "errors.jsonl"), "");
+  await persistMeta(job);
+  return { ...publicJob(job), cleared: removed };
 }
 
 export function stopJob(id) {
