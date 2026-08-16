@@ -7,26 +7,40 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function foldText(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase();
+}
+
 function countMatches(haystack, term) {
-  let pattern = WORD_BOUNDARY_CACHE.get(term);
+  const folded = foldText(term);
+  let pattern = WORD_BOUNDARY_CACHE.get(folded);
   if (!pattern) {
-    const escaped = escapeRegExp(term);
-    const needsBoundary = /^[a-z0-9]/.test(term) && /[a-z0-9]$/.test(term);
-    pattern = new RegExp(needsBoundary ? `\\b${escaped}\\b` : escaped, "g");
-    WORD_BOUNDARY_CACHE.set(term, pattern);
+    const escaped = escapeRegExp(folded);
+    const spaceless = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}]/u.test(
+      folded,
+    );
+    const bounded =
+      !spaceless && /^[\p{L}\p{N}]/u.test(folded) && /[\p{L}\p{N}]$/u.test(folded);
+    pattern = new RegExp(
+      bounded ? `(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])` : escaped,
+      "gu",
+    );
+    WORD_BOUNDARY_CACHE.set(folded, pattern);
   }
   const matches = haystack.match(pattern);
   return matches ? matches.length : 0;
 }
 
 function normalizeText(value) {
-  return String(value || "")
-    .toLowerCase()
+  return foldText(value)
     .replace(/<script[\s\S]*?<\/script>/g, " ")
     .replace(/<style[\s\S]*?<\/style>/g, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&[a-z0-9#]+;/g, " ")
-    .replace(/[^a-z0-9+.\- ]+/g, " ")
+    .replace(/[^\p{L}\p{N}+.\- ]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -51,14 +65,17 @@ export function extractSignals(html, url = "") {
     .join(" ");
 
   let hostname = "";
+  let urlText = "";
   try {
-    hostname = new URL(url).hostname.replace(/^www\./, "");
+    const parsed = new URL(url);
+    hostname = parsed.hostname.replace(/^www\./, "");
+    urlText = `${parsed.hostname} ${parsed.pathname} ${parsed.search}`.replace(/[/?#=&._-]+/g, " ");
   } catch {
     hostname = "";
   }
 
   const body = normalizeText($("body").text() || raw).slice(0, 80_000);
-  const focused = normalizeText([title, description, keywords, headings, hostname].join(" "));
+  const focused = normalizeText([title, description, keywords, headings, hostname, urlText].join(" "));
 
   return {
     title: normalizeText(title),
