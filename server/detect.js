@@ -71,12 +71,17 @@ export function summarizeResult(page, result) {
   };
 }
 
-export async function detectOne(input) {
+export async function detectOne(input, { signal } = {}) {
   const requestedUrl = normalizeUrl(input);
   try {
-    const page = await fetchPage(input);
+    const page = await fetchPage(input, { signal });
     return summarizeResult(page, classifyPage({ html: page.html, url: page.url }));
   } catch (error) {
+    if (signal?.aborted || error.message === "Stopped") {
+      const stopped = new Error("Stopped");
+      stopped.code = "STOPPED";
+      throw stopped;
+    }
     const result = classifyPage({ html: "", url: requestedUrl });
     if (result.group.id !== "unknown") {
       return summarizeResult(

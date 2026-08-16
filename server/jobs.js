@@ -128,6 +128,7 @@ export async function loadJobsFromDisk() {
         counts: meta.counts || emptyCounts(),
         cursor: meta.cursor || items.length + errors.length,
         stopRequested: false,
+        abortControllers: new Set(),
       };
       if (job.status === "running") job.status = "stopped";
       jobs.set(id, job);
@@ -217,8 +218,15 @@ export function stopJob(id) {
   const job = jobs.get(id);
   if (!job) return null;
   job.stopRequested = true;
-  if (job.status === "running") job.status = "stopping";
+  job.status = "stopped";
   job.updatedAt = Date.now();
+  for (const controller of job.abortControllers || []) {
+    try {
+      controller.abort();
+    } catch {
+      // ignore
+    }
+  }
   persistMeta(job).catch(() => {});
   return publicJob(job);
 }
@@ -232,6 +240,8 @@ async function runJob(job) {
   const threads = Math.max(1, job.threads || 8);
   let next = job.cursor || 0;
 
+  job.abortControllers = job.abortControllers || new Set();
+
   async function worker() {
     while (true) {
       if (job.stopRequested) return;
@@ -239,17 +249,23 @@ async function runJob(job) {
       next += 1;
       if (index >= job.urls.length) return;
       const url = job.urls[index];
+      const controller = new AbortController();
+      job.abortControllers.add(controller);
       try {
-        const result = slimItem(await detectOne(url));
+        const result = slimItem(await detectOne(url, { signal: controller.signal }));
+        if (job.stopRequested) return;
         job.items.push(result);
         job.ok += 1;
         job.counts[result.groupId] = (job.counts[result.groupId] || 0) + 1;
         await persistItem(job, result);
       } catch (error) {
+        if (job.stopRequested || error.code === "STOPPED" || error.message === "Stopped") return;
         const failed = { url, error: error.message || "Could not analyze that site" };
         job.errors.push(failed);
         job.failed += 1;
         await persistError(job, failed);
+      } finally {
+        job.abortControllers.delete(controller);
       }
       job.processed += 1;
       job.cursor = Math.max(job.cursor, index + 1);
@@ -312,6 +328,7 @@ export async function createJob({ text, urls, threads = 8 }) {
     updatedAt: now,
     cursor: 0,
     stopRequested: false,
+    abortControllers: new Set(),
   };
   jobs.set(id, job);
   await persistUrls(job);

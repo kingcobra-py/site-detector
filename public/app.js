@@ -66,7 +66,7 @@ function setCounts(counts, failed = 0) {
 
 function setRunning(running) {
   submit.disabled = running;
-  stopBtn.disabled = !running;
+  stopBtn.classList.toggle("idle", !running);
 }
 
 async function readJson(response) {
@@ -258,13 +258,24 @@ document.querySelectorAll(".chip").forEach((chip) => {
 });
 
 stopBtn.addEventListener("click", async () => {
-  if (!currentJob) return;
-  stopBtn.disabled = true;
+  showStatus("Stopping… cancelling in-flight checks.");
   try {
-    const response = await fetch(`/api/jobs/${currentJob.id}/stop`, { method: "POST" });
+    let id = currentJob?.id;
+    if (!id) {
+      const latest = await fetch("/api/jobs/latest");
+      if (latest.ok) id = (await readJson(latest)).id;
+    }
+    if (!id) {
+      showStatus("No scan is running.", true);
+      return;
+    }
+    const response = await fetch(`/api/jobs/${id}/stop`, { method: "POST" });
     const job = await readJson(response);
+    if (!response.ok) throw new Error(job.error || "Could not stop");
+    clearInterval(pollTimer);
     renderJob(job, { items: [], errors: [] });
-    showStatus("Stopping… already-scanned URLs stay on the site.");
+    setRunning(false);
+    showStatus(`Stopped. ${job.ok} grouped · ${job.failed} failed · ${job.processed} saved.`);
   } catch (error) {
     showStatus(error.message, true);
   }

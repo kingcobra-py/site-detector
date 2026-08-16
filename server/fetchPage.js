@@ -109,8 +109,22 @@ async function assertPublicHost(hostname) {
   }
 }
 
-async function fetchOnce(current) {
+function linkSignals(...signals) {
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  for (const signal of signals) {
+    if (!signal) continue;
+    if (signal.aborted) {
+      controller.abort();
+      break;
+    }
+    signal.addEventListener("abort", abort, { once: true });
+  }
+  return controller;
+}
+
+async function fetchOnce(current, externalSignal) {
+  const controller = linkSignals(externalSignal);
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const response = await undiciFetch(current, {
@@ -173,15 +187,16 @@ async function fetchOnce(current) {
   }
 }
 
-export async function fetchPage(inputUrl) {
+export async function fetchPage(inputUrl, { signal } = {}) {
   const startUrl = normalizeUrl(inputUrl);
   const parsed = new URL(startUrl);
   await assertPublicHost(parsed.hostname);
 
   let lastError = "Could not load the page";
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (signal?.aborted) throw new Error("Stopped");
     try {
-      const page = await fetchOnce(startUrl);
+      const page = await fetchOnce(startUrl, signal);
       return {
         url: page.url,
         requestedUrl: startUrl,
@@ -190,6 +205,7 @@ export async function fetchPage(inputUrl) {
         html: page.html,
       };
     } catch (error) {
+      if (signal?.aborted || error?.name === "AbortError") throw new Error("Stopped");
       lastError = fetchErrorMessage(error);
       if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 250));
     }

@@ -124,6 +124,10 @@ body {
   color: #ffb3c0;
 }
 
+.stop.idle {
+  opacity: 0.7;
+}
+
 textarea,
 input {
   flex: 1;
