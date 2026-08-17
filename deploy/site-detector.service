@@ -12,6 +12,9 @@ RestartSec=3
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=3001
+Environment=DATA_DIR=/opt/site-detector/data
+Environment=SCREENSHOT_DIR=/opt/site-detector/data/screenshots
+Environment=PLAYWRIGHT_BROWSERS_PATH=/var/cache/site-detector/ms-playwright
 LimitNOFILE=65535
 
 [Install]

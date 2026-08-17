@@ -1,14 +1,39 @@
 import { classifyPage } from "./classify.js";
-import { fetchPage, normalizeUrl } from "./fetchPage.js";
+import { fetchPage, isUserStop, normalizeUrl } from "./fetchPage.js";
 import { GROUPS, UNKNOWN_GROUP, groupById } from "./groups.js";
 
-export const MAX_BULK_URLS = 40;
-const CONCURRENCY = 5;
+const CONCURRENCY = 6;
 
-export function parseUrlList(input, { max = MAX_BULK_URLS } = {}) {
-  const raw = Array.isArray(input)
-    ? input
-    : String(input || "").split(/[\n\r,;\t ]+/);
+function cleanCandidate(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[.,;:)+\]}]+$/g, "");
+}
+
+export function extractUrlCandidates(input) {
+  if (Array.isArray(input)) {
+    return input.map(cleanCandidate).filter(Boolean);
+  }
+
+  const text = String(input || "");
+  const fromLinks = (text.match(/https?:\/\/[^\s<>"'`]+/gi) || []).map(cleanCandidate);
+  const fromLines = [];
+
+  for (const line of text.split(/[\n\r]+/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed.length > 400 || /<!doctype|<html|<div|<body/i.test(trimmed)) {
+      fromLines.push(...(trimmed.match(/https?:\/\/[^\s<>"'`]+/gi) || []).map(cleanCandidate));
+      continue;
+    }
+    fromLines.push(...trimmed.split(/[,;\t ]+/).map(cleanCandidate).filter(Boolean));
+  }
+
+  return [...new Set([...fromLines, ...fromLinks])];
+}
+
+export function parseUrlList(input) {
+  const raw = extractUrlCandidates(input);
 
   const seen = new Set();
   const urls = [];
@@ -25,12 +50,6 @@ export function parseUrlList(input, { max = MAX_BULK_URLS } = {}) {
     } catch (error) {
       invalid.push({ url: trimmed, error: error.message });
     }
-  }
-
-  if (urls.length > max) {
-    const error = new Error(`At most ${max} URLs per batch`);
-    error.code = "TOO_MANY";
-    throw error;
   }
 
   return { urls, invalid };
@@ -52,10 +71,28 @@ export function summarizeResult(page, result) {
   };
 }
 
-export async function detectOne(input) {
-  const page = await fetchPage(input);
-  const result = classifyPage({ html: page.html, url: page.url });
-  return summarizeResult(page, result);
+export async function detectOne(input, { signal } = {}) {
+  const requestedUrl = normalizeUrl(input);
+  try {
+    const page = await fetchPage(input, { signal });
+    return summarizeResult(page, classifyPage({ html: page.html, url: page.url }));
+  } catch (error) {
+    if (isUserStop(signal, error)) {
+      throw Object.assign(new Error("Stopped"), { code: "STOPPED" });
+    }
+    const result = classifyPage({ html: "", url: requestedUrl });
+    if (result.group.id !== "unknown") {
+      return summarizeResult(
+        {
+          requestedUrl,
+          url: requestedUrl,
+          status: 0,
+        },
+        result,
+      );
+    }
+    throw error;
+  }
 }
 
 export function groupResults(items, errors = []) {

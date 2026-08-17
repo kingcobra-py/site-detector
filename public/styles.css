@@ -11,7 +11,9 @@
   --hosting: #4aa3ff;
   --gambling: #ff5c7a;
   --donation: #c084fc;
+  --proxies: #3dd6d0;
   --unknown: #8b93a7;
+  --failed: #ff5c7a;
 }
 
 * {
@@ -85,11 +87,45 @@ body {
 .actions {
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   margin-top: 12px;
 }
 
 .actions .hint {
   margin: 0;
+  flex: 1;
+}
+
+.threads {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.threads input[type="number"] {
+  width: 88px;
+  flex: none;
+}
+
+.threads input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.stop {
+  background: #3a2230;
+  color: #ffb3c0;
+}
+
+.stop.idle {
+  opacity: 0.7;
 }
 
 textarea,
@@ -136,7 +172,19 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #111821;
+  color: var(--text);
   font-size: 0.92rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chip.dim {
+  opacity: 0.45;
+}
+
+.chip.selected {
+  outline: 2px solid var(--match, var(--accent));
 }
 
 .chip .count {
@@ -161,6 +209,8 @@ button:disabled {
 .chip[data-group="hosting"] .dot { background: var(--hosting); }
 .chip[data-group="gambling"] .dot { background: var(--gambling); }
 .chip[data-group="donation"] .dot { background: var(--donation); }
+.chip[data-group="proxies"] .dot { background: var(--proxies); }
+.chip[data-group="failed"] .dot { background: var(--failed); }
 
 .status,
 .result {
@@ -257,6 +307,75 @@ button:disabled {
   border-bottom: 1px solid var(--line);
 }
 
+.hit {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 12px;
+  align-items: start;
+}
+
+.hit-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.shot {
+  padding: 6px 10px;
+  background: #0f141b;
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.shot-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 8, 12, 0.78);
+}
+
+.shot-modal[hidden],
+.shot-modal.hidden {
+  display: none;
+}
+
+.shot-card {
+  width: min(960px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+}
+
+.shot-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.shot-card img {
+  display: none;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #0f141b;
+}
+
+.shot-card img.visible {
+  display: block;
+}
+
 .bucket a {
   color: var(--text);
   font-weight: 600;
@@ -276,6 +395,7 @@ button:disabled {
 .bucket[data-group="hosting"] .dot { background: var(--hosting); }
 .bucket[data-group="gambling"] .dot { background: var(--gambling); }
 .bucket[data-group="donation"] .dot { background: var(--donation); }
+.bucket[data-group="proxies"] .dot { background: var(--proxies); }
 .bucket[data-group="unknown"] .dot { background: var(--unknown); }
 
 .error-bucket h2 {
@@ -285,8 +405,13 @@ button:disabled {
 @media (max-width: 640px) {
   .row,
   .actions,
-  .bucket header {
+  .bucket header,
+  .shot-card header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .hit {
+    grid-template-columns: 1fr;
   }
 }

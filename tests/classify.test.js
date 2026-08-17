@@ -1,8 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { classifyPage } from "../server/classify.js";
-import { groupResults, parseUrlList } from "../server/detect.js";
-import { isPrivateIp, normalizeUrl } from "../server/fetchPage.js";
+import { extractUrlCandidates, groupResults, parseUrlList } from "../server/detect.js";
+import { isPrivateIp, isUserStop, normalizeUrl } from "../server/fetchPage.js";
 
 function page(title, extra = "") {
   return {
@@ -12,13 +12,47 @@ function page(title, extra = "") {
 }
 
 describe("classifyPage", () => {
-  it("groups gift cards, game keys, CD keys, and top-up together", () => {
+  it("groups gift cards, video games, Xbox, Apple, CD keys, and top-up together", () => {
     const gift = classifyPage(page("Buy Steam gift cards and Xbox gift cards"));
+    const apple = classifyPage(page("Apple Gift Card and iTunes gift cards"));
+    const xbox = classifyPage(page("Xbox Game Pass and Xbox gift card store"));
+    const games = classifyPage(page("Buy video games and PC games digital download"));
     const keys = classifyPage(page("Cheap CD keys and Steam game keys instant delivery"));
     const topup = classifyPage(page("Game top-up for Mobile Legends and PUBG UC"));
     assert.equal(gift.group.id, "digital_goods");
+    assert.equal(apple.group.id, "digital_goods");
+    assert.equal(xbox.group.id, "digital_goods");
+    assert.equal(games.group.id, "digital_goods");
     assert.equal(keys.group.id, "digital_goods");
     assert.equal(topup.group.id, "digital_goods");
+  });
+
+  it("detects gift-card and video-game shops in other languages", () => {
+    const french = classifyPage(page("Cartes cadeaux Apple et jeux vidéo", "Clé Steam et boutique de jeux numériques."));
+    const spanish = classifyPage(page("Tarjetas de regalo Xbox y videojuegos", "Clave de juego y recarga de juegos."));
+    const german = classifyPage(page("Geschenkkarten und Videospiele kaufen", "Steam Spielkey und Produktschlüssel."));
+    const arabic = classifyPage(page("بطاقة هدية أبل", "شحن الألعاب ومفتاح ستيم."));
+    const chinese = classifyPage(page("苹果礼品卡", "游戏密钥和游戏充值。"));
+    const russian = classifyPage(page("Подарочная карта Xbox", "Видеоигры и ключи Steam."));
+    assert.equal(french.group.id, "digital_goods");
+    assert.equal(spanish.group.id, "digital_goods");
+    assert.equal(german.group.id, "digital_goods");
+    assert.equal(arabic.group.id, "digital_goods");
+    assert.equal(chinese.group.id, "digital_goods");
+    assert.equal(russian.group.id, "digital_goods");
+  });
+
+  it("classifies Apple and Xbox shops from the URL when the page is empty", () => {
+    const apple = classifyPage({
+      url: "https://www.apple.com/shop/gift-cards",
+      html: "<html><head><title></title></head><body></body></html>",
+    });
+    const xbox = classifyPage({
+      url: "https://www.xbox.com/en-US/xbox-game-pass",
+      html: "<html></html>",
+    });
+    assert.equal(apple.group.id, "digital_goods");
+    assert.equal(xbox.group.id, "digital_goods");
   });
 
   it("detects eSIM stores", () => {
@@ -29,6 +63,13 @@ describe("classifyPage", () => {
   it("detects clothing stores", () => {
     const result = classifyPage(page("Streetwear clothing boutique", "Hoodies, jeans, sneakers, and new apparel arrivals."));
     assert.equal(result.group.id, "clothing");
+  });
+
+  it("detects residential and ISP proxy sellers", () => {
+    const result = classifyPage(
+      page("Buy residential proxies and ISP IPs", "Rotating residential proxy, SOCKS5, mobile proxies, Bright Data alternative."),
+    );
+    assert.equal(result.group.id, "proxies");
   });
 
   it("detects VPS and server hosts", () => {
@@ -49,6 +90,34 @@ describe("classifyPage", () => {
   it("returns unknown when nothing matches", () => {
     const result = classifyPage(page("Personal blog about hiking trails"));
     assert.equal(result.group.id, "unknown");
+  });
+
+  it("does not treat restaurant or hotel gift cards as digital goods shops", () => {
+    const food = classifyPage(
+      page(
+        "Chipotle Gift Cards | Order Online",
+        "Buy a restaurant gift card. Mexican food, burritos, catering, and our dinner menu. Dine-in or takeout.",
+      ),
+    );
+    const hotel = classifyPage({
+      url: "https://www.marriott.com/gift-cards",
+      html: `<html><head><title>Marriott Bonvoy Gift Cards</title></head><body>Hotel gift cards. Book a room, guest rooms, room rates, concierge, and hospitality.</body></html>`,
+    });
+    const pizzaHost = classifyPage({
+      url: "https://joespizza.com/gift-cards",
+      html: `<html><head><title>Gift Cards</title></head><body>Buy gift cards for our pizzeria. Order takeout.</body></html>`,
+    });
+    assert.equal(food.group.id, "unknown");
+    assert.equal(hotel.group.id, "unknown");
+    assert.equal(pizzaHost.group.id, "unknown");
+  });
+
+  it("still groups real game and gift-card shops", () => {
+    const shop = classifyPage(
+      page("Buy Steam gift cards and Xbox gift cards", "CD keys, game keys, and PlayStation gift cards."),
+    );
+    assert.equal(shop.group.id, "digital_goods");
+    assert.ok(shop.confidence >= 50);
   });
 });
 
@@ -77,9 +146,18 @@ describe("parseUrlList", () => {
     assert.match(invalid[0].error, /not allowed/);
   });
 
-  it("rejects more than 40 URLs", () => {
+  it("accepts more than 40 URLs", () => {
     const text = Array.from({ length: 41 }, (_, i) => `https://shop${i}.example`).join("\n");
-    assert.throws(() => parseUrlList(text), /At most 40/);
+    const { urls } = parseUrlList(text);
+    assert.equal(urls.length, 41);
+  });
+
+  it("pulls http URLs out of an HTML dump instead of treating every word as a URL", () => {
+    const html = `<!DOCTYPE html><html><body><a href="https://www.airalo.com/">eSIM</a> and https://contabo.com extra words</body></html>`;
+    const candidates = extractUrlCandidates(html);
+    assert.ok(candidates.every((item) => item.startsWith("http")));
+    const { urls } = parseUrlList(html);
+    assert.deepEqual(urls, ["https://www.airalo.com/", "https://contabo.com/"]);
   });
 });
 
@@ -106,6 +184,13 @@ describe("isPrivateIp", () => {
     assert.equal(isPrivateIp("104.20.23.154"), false);
     assert.equal(isPrivateIp("172.66.147.243"), false);
     assert.equal(isPrivateIp("2606:4700:10::6814:179a"), false);
+  });
+
+  it("does not treat a fetch timeout abort as a user Stop", () => {
+    assert.equal(isUserStop(undefined, { name: "AbortError" }), false);
+    assert.equal(isUserStop({ aborted: false }, { name: "AbortError" }), false);
+    assert.equal(isUserStop({ aborted: true }, { name: "AbortError" }), true);
+    assert.equal(isUserStop(undefined, { code: "STOPPED", message: "Stopped" }), true);
   });
 
   it("blocks loopback, RFC1918, and link-local", () => {
