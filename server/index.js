@@ -3,11 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { detectMany, detectOne } from "./detect.js";
 import { normalizeUrl } from "./fetchPage.js";
+import { canScreenshotGroup, captureScreenshot } from "./screenshot.js";
 import { GROUPS, UNKNOWN_GROUP } from "./groups.js";
 import {
   clearFailed,
   createJob,
   resumeJob,
+  findJobItemByUrl,
   getJob,
   getJobItems,
   getJobUrls,
@@ -48,6 +50,26 @@ app.get("/api/jobs/:id/items", (req, res) => {
     return;
   }
   res.json(payload);
+});
+
+app.get("/api/jobs/:id/screenshot", async (req, res) => {
+  const url = String(req.query.url || "");
+  const { job, item } = findJobItemByUrl(req.params.id, url);
+  if (!job) {
+    res.status(404).json({ error: "Scan not found" });
+    return;
+  }
+  if (!item || !canScreenshotGroup(item.groupId)) {
+    res.status(400).json({ error: "Screenshots are only for grouped matches, not unknown or failed URLs." });
+    return;
+  }
+  try {
+    const file = await captureScreenshot(item.finalUrl || item.requestedUrl);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.type("image/jpeg").sendFile(file);
+  } catch (error) {
+    res.status(502).json({ error: error.message || "Could not capture that screenshot" });
+  }
 });
 
 app.get("/api/jobs/:id/urls", (req, res) => {

@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { clearFailed, createJob, getJob, getJobItems, getJobUrls, resolveThreads, resumeJob, stopJob } from "../server/jobs.js";
+import { canScreenshotGroup } from "../server/screenshot.js";
 
 describe("jobs", () => {
   it("starts a saved scan and keeps invalid URLs as failures", async () => {
@@ -28,5 +29,14 @@ describe("jobs", () => {
     assert.equal(resolveThreads("unlimited", 1200), 1200);
     assert.equal(resolveThreads(250, 50000), 250);
     assert.equal(resolveThreads(9999, 80), 9999);
+  });
+
+  it("only allows screenshots for grouped matches", () => {
+    assert.equal(canScreenshotGroup("digital_goods"), true);
+    assert.equal(canScreenshotGroup("esim"), true);
+    assert.equal(canScreenshotGroup("unknown"), false);
+    assert.equal(canScreenshotGroup("failed"), false);
+    assert.equal(canScreenshotGroup("errors"), false);
+    assert.equal(canScreenshotGroup(""), false);
   });
 });

@@ -23,6 +23,60 @@ let activeFilter = null;
 let currentJob = null;
 let pollTimer = null;
 let itemOffset = 0;
+let shotObjectUrl = null;
+
+const shotModal = document.querySelector("#shot-modal");
+const shotImage = document.querySelector("#shot-image");
+const shotStatus = document.querySelector("#shot-status");
+const shotCaption = document.querySelector("#shot-caption");
+
+function closeScreenshot() {
+  if (!shotModal) return;
+  shotModal.hidden = true;
+  shotModal.classList.add("hidden");
+  shotImage?.classList.remove("visible");
+  if (shotObjectUrl) {
+    URL.revokeObjectURL(shotObjectUrl);
+    shotObjectUrl = null;
+  }
+}
+
+async function openScreenshot(jobId, url, button) {
+  if (!shotModal || !jobId || !url) return;
+  const previous = button?.textContent;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Loading…";
+  }
+  shotModal.hidden = false;
+  shotModal.classList.remove("hidden");
+  shotImage.classList.remove("visible");
+  shotImage.removeAttribute("src");
+  shotCaption.textContent = url;
+  shotStatus.textContent = "Taking screenshot…";
+  try {
+    const response = await fetch(
+      `/api/jobs/${jobId}/screenshot?url=${encodeURIComponent(url)}`,
+    );
+    if (!response.ok) {
+      const payload = await readJson(response).catch(() => ({}));
+      throw new Error(payload.error || "Could not capture that screenshot");
+    }
+    const blob = await response.blob();
+    if (shotObjectUrl) URL.revokeObjectURL(shotObjectUrl);
+    shotObjectUrl = URL.createObjectURL(blob);
+    shotImage.src = shotObjectUrl;
+    shotImage.classList.add("visible");
+    shotStatus.textContent = "Click the image area, then Close when you are done.";
+  } catch (error) {
+    shotStatus.textContent = error.message;
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = previous || "Screenshot";
+    }
+  }
+}
 
 function showStatus(message, isError = false) {
   statusEl.classList.remove("hidden");
@@ -111,14 +165,22 @@ function renderJob(job, page) {
   const groupMeta = (job.groups || []).find((group) => group.id === filter);
   const shown = failedFilter ? job.failed : filter ? groupMeta?.count || items.length : job.ok;
 
+  const allowShot = filter && filter !== "unknown" && filter !== "failed";
   const rows = items
     .map((item) => {
       const href = escapeHtml(item.finalUrl || item.requestedUrl);
       const title = escapeHtml(item.title || item.hostname || "Untitled page");
       const url = escapeHtml(item.finalUrl || item.requestedUrl);
-      return `<li>
-        <a href="${href}" target="_blank" rel="noreferrer">${title}</a>
-        <span class="meta">${url}${item.confidence ? ` · ${item.confidence}%` : ""}</span>
+      const shotUrl = escapeHtml(item.requestedUrl || item.finalUrl);
+      const shot = allowShot
+        ? `<button type="button" class="shot" data-shot="${shotUrl}">Screenshot</button>`
+        : "";
+      return `<li class="hit">
+        <div class="hit-main">
+          <a href="${href}" target="_blank" rel="noreferrer">${title}</a>
+          <span class="meta">${url}${item.confidence ? ` · ${item.confidence}%` : ""}</span>
+        </div>
+        ${shot}
       </li>`;
     })
     .join("");
@@ -165,13 +227,17 @@ function renderJob(job, page) {
               <h2><span class="dot"></span>${escapeHtml(groupMeta?.label || filter)}</h2>
               <button type="button" class="copy" data-copy="${escapeHtml(filter)}">Copy URLs</button>
             </header>
-            <p class="meta">Showing ${items.length} of ${shown}. Tap the group again to show all counts only.</p>
+            <p class="meta">Showing ${items.length} of ${shown}, highest confidence first. Tap the group again to show all counts only.</p>
             <ol>${rows || "<li class='meta'>No URLs in this group yet.</li>"}</ol>
             ${more}
           </article>`
           : `<p class="meta">Tap a group above to list its URLs. Tap Failed to review or clear load errors.</p>`
     }
   `;
+
+  resultEl.querySelectorAll("[data-shot]").forEach((button) => {
+    button.addEventListener("click", () => openScreenshot(job.id, button.dataset.shot, button));
+  });
 
   resultEl.querySelector("[data-copy]")?.addEventListener("click", async (event) => {
     const button = event.currentTarget;
@@ -329,3 +395,11 @@ refreshJob()
     }
   })
   .catch(() => {});
+
+document.querySelector("#shot-close")?.addEventListener("click", closeScreenshot);
+shotModal?.addEventListener("click", (event) => {
+  if (event.target === shotModal) closeScreenshot();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && shotModal && !shotModal.hidden) closeScreenshot();
+});

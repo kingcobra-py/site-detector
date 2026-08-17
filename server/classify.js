@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { GROUPS, SIGNALS, UNKNOWN_GROUP, groupById } from "./groups.js";
+import { GENERIC_DIGITAL_TERMS, GROUPS, OFF_TOPIC_VETO, SIGNALS, UNKNOWN_GROUP, groupById } from "./groups.js";
 
 const WORD_BOUNDARY_CACHE = new Map();
 
@@ -119,6 +119,69 @@ export function scoreGroups(textBundle) {
   return { scores, matches };
 }
 
+const DIGITAL_HOSTS = [
+  "apple.com",
+  "xbox.com",
+  "microsoft.com",
+  "playstation.com",
+  "sony.com",
+  "steampowered.com",
+  "nintendo.com",
+  "eneba.com",
+  "kinguin.net",
+  "g2a.com",
+  "gamivo.com",
+  "fanatical.com",
+  "humblebundle.com",
+  "epicgames.com",
+];
+
+function digitalHostBonus(hostname) {
+  const host = String(hostname || "")
+    .replace(/^www\./, "")
+    .toLowerCase();
+  if (!host) return 0;
+  return DIGITAL_HOSTS.some((known) => host === known || host.endsWith(`.${known}`)) ? 20 : 0;
+}
+
+function scoreTermList(textBundle, terms) {
+  let score = 0;
+  for (const { term, weight } of terms) {
+    const focusedHits = countMatches(textBundle.focused, term);
+    const bodyHits = countMatches(textBundle.body, term);
+    if (!focusedHits && !bodyHits) continue;
+    score += focusedHits * weight * 2.4 + Math.min(bodyHits, 8) * weight;
+  }
+  return score;
+}
+
+function hostLooksOffTopic(hostname) {
+  const host = String(hostname || "")
+    .toLowerCase()
+    .replace(/^www\./, "");
+  return /\b(hotel|hotels|resort|resorts|motel|inn|lodge|restaurant|restaurants|pizza|pizzeria|sushi|burger|steakhouse|bakery|bbq|grill|cafe|coffee|dining|kitchen|bistro|tavern|eatery|lodging|marriott|hilton|hyatt|ihg|airbnb)\b/.test(
+    host.replace(/[.-]/g, " "),
+  );
+}
+
+export function applyDigitalGoodsGuard(scores, matches, textBundle) {
+  const digital = scores.digital_goods || 0;
+  if (digital <= 0) return scores;
+
+  const specificPoints = (matches.digital_goods || [])
+    .filter((item) => !GENERIC_DIGITAL_TERMS.has(item.term))
+    .reduce((sum, item) => sum + item.points, 0);
+  if (digitalHostBonus(textBundle.hostname)) return scores;
+  const veto = scoreTermList(textBundle, OFF_TOPIC_VETO);
+  const hostVeto = hostLooksOffTopic(textBundle.hostname) ? 16 : 0;
+  const offTopic = veto + hostVeto;
+
+  if (offTopic >= 8 && specificPoints < 14) {
+    scores.digital_goods = 0;
+  }
+  return scores;
+}
+
 export function pickWinner(scores) {
   const ranked = Object.entries(scores)
     .map(([id, score]) => ({ id, score }))
@@ -152,6 +215,8 @@ export function pickWinner(scores) {
 export function classifyPage({ html, url }) {
   const extracted = extractSignals(html, url);
   const { scores, matches } = scoreGroups(extracted);
+  scores.digital_goods = (scores.digital_goods || 0) + digitalHostBonus(extracted.hostname);
+  applyDigitalGoodsGuard(scores, matches, extracted);
   const { group, confidence, ranked } = pickWinner(scores);
 
   return {
@@ -166,4 +231,13 @@ export function classifyPage({ html, url }) {
     matches: matches[group.id] || [],
     allMatches: matches,
   };
+}
+
+export function classifyFromStored(item) {
+  const title = String(item.title || "").replace(/</g, " ");
+  const host = String(item.hostname || "");
+  return classifyPage({
+    html: `<html><head><title>${title}</title></head><body>${title} ${host}</body></html>`,
+    url: item.finalUrl || item.requestedUrl || "",
+  });
 }

@@ -12,11 +12,12 @@
       <header class="hero">
         <p class="eyebrow">URL classifier</p>
         <h1>Paste URLs. See them in seller groups.</h1>
-        <p class="lede">
+          <p class="lede">
           Paste as many URLs as you want, including 50k lists. The server scans
           them in the background and keeps the groups here, so closing the tab
-          does not wipe results. Tap a group to see those URLs. Tap Failed, then
-          Clear failed, to drop URLs that would not load.
+          does not wipe results. Tap a group to see those URLs, sorted by
+          confidence. Tap Screenshot on a match to view the live page. Unknown
+          and failed URLs are not screenshotted.
         </p>
       </header>
 
@@ -92,6 +93,16 @@
       <section id="status" class="status hidden" aria-live="polite"></section>
       <section id="result" class="result hidden"></section>
     </main>
+    <div id="shot-modal" class="shot-modal hidden" hidden>
+      <div class="shot-card">
+        <header>
+          <p id="shot-caption" class="meta">Screenshot</p>
+          <button type="button" id="shot-close" class="copy">Close</button>
+        </header>
+        <p id="shot-status" class="meta">Loading screenshot…</p>
+        <img id="shot-image" alt="Website screenshot" />
+      </div>
+    </div>
     <script src="/app.js" type="module"></script>
   </body>
 </html>

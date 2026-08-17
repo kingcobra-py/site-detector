@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile, appendFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { classifyFromStored } from "./classify.js";
 import { detectOne, parseUrlList } from "./detect.js";
 import { GROUPS, UNKNOWN_GROUP } from "./groups.js";
 
@@ -30,11 +31,38 @@ function slimItem(result) {
   };
 }
 
+function sortByConfidence(items) {
+  return [...items].sort(
+    (a, b) => (b.confidence || 0) - (a.confidence || 0) || String(a.title || a.requestedUrl || "").localeCompare(String(b.title || b.requestedUrl || "")),
+  );
+}
+
+function refineJobItems(job) {
+  const counts = emptyCounts();
+  job.items = (job.items || []).map((item) => {
+    let next = item;
+    if (item.groupId === "digital_goods") {
+      const result = classifyFromStored(item);
+      if (result.group.id === "unknown") {
+        next = {
+          ...item,
+          groupId: "unknown",
+          groupLabel: UNKNOWN_GROUP.label,
+          confidence: 0,
+        };
+      }
+    }
+    counts[next.groupId] = (counts[next.groupId] || 0) + 1;
+    return next;
+  });
+  job.counts = counts;
+}
+
 function publicJob(job, { includeItems = false } = {}) {
   const groups = [...GROUPS, UNKNOWN_GROUP].map((group) => ({
     ...group,
     count: job.counts[group.id] || 0,
-    items: includeItems ? job.items.filter((item) => item.groupId === group.id) : [],
+    items: includeItems ? sortByConfidence(job.items.filter((item) => item.groupId === group.id)) : [],
   }));
   return {
     id: job.id,
@@ -137,6 +165,7 @@ export async function loadJobsFromDisk() {
       const unfinishedDone = meta.status === "done" && leftover > 0;
       if (job.status === "running") job.status = "stopped";
       job.resumeOnLoad = crashed || unfinishedDone;
+      refineJobItems(job);
       jobs.set(id, job);
     } catch {
       // skip broken job folders
@@ -153,6 +182,15 @@ export function getLatestJob() {
 export function getJob(id) {
   const job = jobs.get(id);
   return job ? publicJob(job) : null;
+}
+
+export function findJobItemByUrl(id, url) {
+  const job = jobs.get(id);
+  if (!job) return { job: null, item: null };
+  const target = String(url || "").trim();
+  const item =
+    job.items.find((entry) => entry.requestedUrl === target || entry.finalUrl === target) || null;
+  return { job, item };
 }
 
 function isFailedGroup(groupId) {
@@ -182,7 +220,7 @@ export function getJobItems(id, groupId, offset = 0, limit = 200) {
       errorTotal: job.errors.length,
     };
   }
-  const items = groupId ? job.items.filter((item) => item.groupId === groupId) : job.items;
+  const items = sortByConfidence(groupId ? job.items.filter((item) => item.groupId === groupId) : job.items);
   const errors = groupId ? [] : job.errors;
   return {
     id: job.id,
@@ -201,8 +239,9 @@ export function getJobUrls(id, groupId) {
   if (isFailedGroup(groupId)) {
     return job.errors.map((item) => item.url).join("\n");
   }
-  return job.items
-    .filter((item) => !groupId || item.groupId === groupId)
+  return sortByConfidence(
+    job.items.filter((item) => !groupId || item.groupId === groupId),
+  )
     .map((item) => item.finalUrl || item.requestedUrl)
     .join("\n");
 }

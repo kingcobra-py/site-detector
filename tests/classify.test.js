@@ -91,6 +91,34 @@ describe("classifyPage", () => {
     const result = classifyPage(page("Personal blog about hiking trails"));
     assert.equal(result.group.id, "unknown");
   });
+
+  it("does not treat restaurant or hotel gift cards as digital goods shops", () => {
+    const food = classifyPage(
+      page(
+        "Chipotle Gift Cards | Order Online",
+        "Buy a restaurant gift card. Mexican food, burritos, catering, and our dinner menu. Dine-in or takeout.",
+      ),
+    );
+    const hotel = classifyPage({
+      url: "https://www.marriott.com/gift-cards",
+      html: `<html><head><title>Marriott Bonvoy Gift Cards</title></head><body>Hotel gift cards. Book a room, guest rooms, room rates, concierge, and hospitality.</body></html>`,
+    });
+    const pizzaHost = classifyPage({
+      url: "https://joespizza.com/gift-cards",
+      html: `<html><head><title>Gift Cards</title></head><body>Buy gift cards for our pizzeria. Order takeout.</body></html>`,
+    });
+    assert.equal(food.group.id, "unknown");
+    assert.equal(hotel.group.id, "unknown");
+    assert.equal(pizzaHost.group.id, "unknown");
+  });
+
+  it("still groups real game and gift-card shops", () => {
+    const shop = classifyPage(
+      page("Buy Steam gift cards and Xbox gift cards", "CD keys, game keys, and PlayStation gift cards."),
+    );
+    assert.equal(shop.group.id, "digital_goods");
+    assert.ok(shop.confidence >= 50);
+  });
 });
 
 describe("normalizeUrl", () => {
