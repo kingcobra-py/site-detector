@@ -58,8 +58,14 @@ async function captureNow(url) {
   });
   const page = await context.newPage();
   try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: TIMEOUT_MS });
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    try {
+      await page.goto(url, { waitUntil: "commit", timeout: TIMEOUT_MS });
+      await page.waitForLoadState("domcontentloaded", { timeout: 8_000 }).catch(() => {});
+    } catch (error) {
+      const current = page.url();
+      if (!current || current === "about:blank") throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 800));
     await page.screenshot({
       path: file,
       type: "jpeg",
