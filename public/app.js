@@ -1,7 +1,7 @@
 const form = document.querySelector("#detect-form");
 const input = document.querySelector("#urls");
 const urlFile = document.querySelector("#url-file");
-const fileName = document.querySelector("#file-name");
+const uploadLine = document.querySelector("#upload-line");
 const threadsInput = document.querySelector("#threads");
 const unlimitedThreads = document.querySelector("#unlimited-threads");
 const submit = document.querySelector("#submit");
@@ -105,10 +105,26 @@ unlimitedThreads?.addEventListener("change", () => {
   threadsInput.disabled = unlimitedThreads.checked;
 });
 
+function formatBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${Math.round(n)} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function setUploadLine(text, isError = false) {
+  if (!uploadLine) return;
+  uploadLine.textContent = text;
+  uploadLine.classList.toggle("error", Boolean(isError));
+}
+
 urlFile?.addEventListener("change", () => {
   const file = urlFile.files?.[0];
-  if (fileName) fileName.textContent = file ? `${file.name} (${Math.round(file.size / 1024).toLocaleString()} KB)` : "No file selected";
-  if (file && input) input.removeAttribute("required");
+  if (!file) {
+    setUploadLine("No file selected");
+    return;
+  }
+  setUploadLine(`Ready to upload ${file.name} · ${formatBytes(file.size)}`);
 });
 
 function uploadErrorMessage(error) {
@@ -116,6 +132,29 @@ function uploadErrorMessage(error) {
     return "The 200k list did not reach the server. Upload a .txt file instead of pasting, keep it under 250 MB, and try again.";
   }
   return error?.message || "Could not start scan";
+}
+
+function postJob(body, { onProgress } = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/jobs?threads=${encodeURIComponent(threadCount())}`);
+    xhr.setRequestHeader("Content-Type", "text/plain");
+    if (onProgress && xhr.upload) {
+      xhr.upload.onprogress = (event) => {
+        onProgress({
+          loaded: event.loaded,
+          total: event.lengthComputable ? event.total : 0,
+        });
+      };
+      xhr.upload.onload = () => {
+        onProgress({ loaded: body?.size || body?.length || 0, total: body?.size || body?.length || 0, done: true });
+      };
+    }
+    xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
+    xhr.onerror = () => reject(new TypeError("Failed to fetch"));
+    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.send(body);
+  });
 }
 
 function setCounts(counts, failed = 0) {
@@ -391,26 +430,44 @@ form.addEventListener("submit", async (event) => {
     return;
   }
   setRunning(true);
-  showStatus(
-    file
-      ? `Uploading ${file.name} and starting a server scan…`
-      : "Starting a server scan. This stays on the site even if you close the tab.",
-  );
+  if (file) {
+    setUploadLine(`Uploading ${file.name} · 0 B / ${formatBytes(file.size)} · 0%`);
+    showStatus(`Uploading ${file.name}…`);
+  } else {
+    setUploadLine("Sending pasted URLs…");
+    showStatus("Starting a server scan. This stays on the site even if you close the tab.");
+  }
 
   try {
-    const response = await fetch(`/api/jobs?threads=${encodeURIComponent(threadCount())}`, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: file || pasted,
+    const response = await postJob(file || pasted, {
+      onProgress: ({ loaded, total, done }) => {
+        const size = total || file?.size || loaded;
+        const percent = size ? Math.min(100, Math.round((loaded / size) * 100)) : 0;
+        if (file) {
+          setUploadLine(
+            done || percent >= 100
+              ? `Uploaded ${file.name} · ${formatBytes(size)} · 100% · starting scan…`
+              : `Uploading ${file.name} · ${formatBytes(loaded)} / ${formatBytes(size)} · ${percent}%`,
+          );
+        } else {
+          setUploadLine(`Sending pasted URLs · ${formatBytes(loaded)}`);
+        }
+      },
     });
-    const job = await readJson(response);
-    if (!response.ok) throw new Error(job.error || "Could not start scan");
+    let job;
+    try {
+      job = JSON.parse(response.text);
+    } catch {
+      throw new Error("The server sent a web page instead of results. Refresh and try again.");
+    }
+    if (response.status < 200 || response.status >= 300) throw new Error(job.error || "Could not start scan");
     if (urlFile) urlFile.value = "";
-    if (fileName) fileName.textContent = "No file selected";
+    setUploadLine(file ? `Uploaded ${file.name} · ${formatBytes(file.size)} · 100%` : "Paste sent");
     renderJob(job, { items: [], errors: [] });
     startPolling(job.id);
   } catch (error) {
     setRunning(false);
+    setUploadLine(uploadErrorMessage(error), true);
     showStatus(uploadErrorMessage(error), true);
   }
 });

@@ -125,6 +125,17 @@ body {
   flex: none;
 }
 
+.upload-line {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-line.error {
+  color: #ffb3c0;
+}
+
 .buttons {
   display: flex;
   gap: 8px;
