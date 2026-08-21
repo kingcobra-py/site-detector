@@ -13,11 +13,10 @@
         <p class="eyebrow">URL classifier</p>
         <h1>Paste URLs. See them in seller groups.</h1>
           <p class="lede">
-          Paste as many URLs as you want, including 50k lists. The server scans
-          them in the background and keeps the groups here, so closing the tab
-          does not wipe results. Tap a group to see those URLs, sorted by
-          confidence. Tap Screenshot on a match to view the live page. Unknown
-          and failed URLs are not screenshotted.
+          Paste URLs or upload a .txt list, including 200k lists. For large
+          lists, upload the file instead of pasting. The server scans in the
+          background and keeps the groups here. Tap a group to see those URLs,
+          sorted by confidence. Tap Screenshot on a match to view the live page.
         </p>
       </header>
 
@@ -27,9 +26,13 @@
           id="urls"
           name="urls"
           rows="8"
-          required
           placeholder="https://example.com&#10;https://another-shop.com&#10;shop3.com"
         ></textarea>
+        <label class="file-label">
+          Or upload a .txt / .csv list
+          <input id="url-file" type="file" accept=".txt,.csv,text/plain" />
+          <span id="file-name" class="hint">No file selected</span>
+        </label>
         <div class="row actions">
           <label class="threads">
             Threads
@@ -39,7 +42,7 @@
             <input id="unlimited-threads" type="checkbox" />
             Unlimited
           </label>
-          <p class="hint">No URL limit. Unlimited threads means one worker per URL.</p>
+          <p class="hint">No URL limit. For 50k–200k lists, upload a .txt file. Unlimited is capped at 256 workers.</p>
           <div class="buttons">
             <button type="submit" id="submit">Detect all</button>
             <button type="button" id="stop" class="stop">Stop</button>

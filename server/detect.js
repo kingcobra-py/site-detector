@@ -10,12 +10,35 @@ function cleanCandidate(value) {
     .replace(/[.,;:)+\]}]+$/g, "");
 }
 
+function looksLikeHtmlDump(text) {
+  return /<!doctype|<html|<body|<div/i.test(String(text || "").slice(0, 4000));
+}
+
 export function extractUrlCandidates(input) {
   if (Array.isArray(input)) {
     return input.map(cleanCandidate).filter(Boolean);
   }
 
   const text = String(input || "");
+  if (text.length > 20_000 && !looksLikeHtmlDump(text)) {
+    const seen = new Set();
+    const urls = [];
+    let start = 0;
+    while (start < text.length) {
+      let end = text.indexOf("\n", start);
+      if (end === -1) end = text.length;
+      let line = text.slice(start, end);
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      start = end + 1;
+      const trimmed = cleanCandidate(line);
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      if (seen.has(trimmed)) continue;
+      seen.add(trimmed);
+      urls.push(trimmed);
+    }
+    return urls;
+  }
+
   const fromLinks = (text.match(/https?:\/\/[^\s<>"'`]+/gi) || []).map(cleanCandidate);
   const fromLines = [];
 

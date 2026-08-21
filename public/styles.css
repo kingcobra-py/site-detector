@@ -109,9 +109,20 @@ body {
   flex: none;
 }
 
-.threads input[type="checkbox"] {
+.file-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.file-label input[type="file"] {
   width: auto;
-  margin: 0;
+  padding: 8px;
+  flex: none;
 }
 
 .buttons {

@@ -152,6 +152,14 @@ describe("parseUrlList", () => {
     assert.equal(urls.length, 41);
   });
 
+  it("parses a large one-URL-per-line list without treating it as HTML", () => {
+    const text = Array.from({ length: 8000 }, (_, i) => `https://shop${i}.example`).join("\n");
+    const { urls } = parseUrlList(text);
+    assert.equal(urls.length, 8000);
+    assert.equal(urls[0], "https://shop0.example/");
+    assert.equal(urls[7999], "https://shop7999.example/");
+  });
+
   it("pulls http URLs out of an HTML dump instead of treating every word as a URL", () => {
     const html = `<!DOCTYPE html><html><body><a href="https://www.airalo.com/">eSIM</a> and https://contabo.com extra words</body></html>`;
     const candidates = extractUrlCandidates(html);

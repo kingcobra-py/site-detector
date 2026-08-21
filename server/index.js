@@ -23,9 +23,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 
+const BODY_LIMIT = "250mb";
+
 const app = express();
-app.use(express.json({ limit: "40mb" }));
-app.use(express.text({ type: "text/plain", limit: "40mb" }));
+app.use(express.json({ limit: BODY_LIMIT }));
+app.use(express.text({ type: "text/plain", limit: BODY_LIMIT }));
 app.use(express.static(path.join(__dirname, "../public")));
 
 app.get("/api/groups", (_req, res) => {
@@ -121,8 +123,10 @@ app.post("/api/jobs", async (req, res) => {
   try {
     const body = req.body || {};
     const text = typeof body === "string" ? body : body.text || "";
-    const urls = typeof body === "object" ? body.urls : undefined;
-    const threads = typeof body === "object" ? body.threads : undefined;
+    const urls = typeof body === "object" && !Array.isArray(body) ? body.urls : undefined;
+    const threads =
+      req.query.threads ??
+      (typeof body === "object" && body && !Array.isArray(body) ? body.threads : undefined);
     const job = await createJob({ text, urls, threads });
     res.status(202).json(job);
   } catch (error) {
@@ -173,7 +177,7 @@ app.use((error, _req, res, next) => {
   const tooLarge = error?.type === "entity.too.large" || error?.status === 413;
   res.status(tooLarge ? 413 : error.status || 500).json({
     error: tooLarge
-      ? "That paste is too large. Split the file or use a .txt list under 40 MB."
+      ? "That list is too large. Upload a .txt file under 250 MB, or split the list."
       : error.message || "Request failed",
   });
 });

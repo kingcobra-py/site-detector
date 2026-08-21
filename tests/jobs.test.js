@@ -24,11 +24,12 @@ describe("jobs", () => {
     assert.equal(resumeJob("missing-job"), null);
   });
 
-  it("treats 0 threads as one worker per URL and does not cap a high thread count", () => {
-    assert.equal(resolveThreads(0, 50000), 50000);
-    assert.equal(resolveThreads("unlimited", 1200), 1200);
+  it("caps unlimited and huge thread counts so a 200k list cannot spawn 200k workers", () => {
+    assert.equal(resolveThreads(0, 200000), 256);
+    assert.equal(resolveThreads("unlimited", 1200), 256);
     assert.equal(resolveThreads(250, 50000), 250);
-    assert.equal(resolveThreads(9999, 80), 9999);
+    assert.equal(resolveThreads(9999, 80), 256);
+    assert.equal(resolveThreads(8, 200000), 8);
   });
 
   it("only allows screenshots for grouped matches", () => {

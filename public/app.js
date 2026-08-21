@@ -1,5 +1,7 @@
 const form = document.querySelector("#detect-form");
 const input = document.querySelector("#urls");
+const urlFile = document.querySelector("#url-file");
+const fileName = document.querySelector("#file-name");
 const threadsInput = document.querySelector("#threads");
 const unlimitedThreads = document.querySelector("#unlimited-threads");
 const submit = document.querySelector("#submit");
@@ -102,6 +104,19 @@ function threadCount() {
 unlimitedThreads?.addEventListener("change", () => {
   threadsInput.disabled = unlimitedThreads.checked;
 });
+
+urlFile?.addEventListener("change", () => {
+  const file = urlFile.files?.[0];
+  if (fileName) fileName.textContent = file ? `${file.name} (${Math.round(file.size / 1024).toLocaleString()} KB)` : "No file selected";
+  if (file && input) input.removeAttribute("required");
+});
+
+function uploadErrorMessage(error) {
+  if (error?.name === "TypeError" || /failed to fetch|networkerror|load failed/i.test(String(error?.message || ""))) {
+    return "The 200k list did not reach the server. Upload a .txt file instead of pasting, keep it under 250 MB, and try again.";
+  }
+  return error?.message || "Could not start scan";
+}
 
 function setCounts(counts, failed = 0) {
   const merged = { ...counts, failed };
@@ -369,22 +384,34 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   activeFilter = null;
   itemOffset = 0;
+  const file = urlFile?.files?.[0];
+  const pasted = input?.value?.trim() || "";
+  if (!file && !pasted) {
+    showStatus("Paste URLs or upload a .txt list first.", true);
+    return;
+  }
   setRunning(true);
-  showStatus("Starting a server scan. This stays on the site even if you close the tab.");
+  showStatus(
+    file
+      ? `Uploading ${file.name} and starting a server scan…`
+      : "Starting a server scan. This stays on the site even if you close the tab.",
+  );
 
   try {
-    const response = await fetch("/api/jobs", {
+    const response = await fetch(`/api/jobs?threads=${encodeURIComponent(threadCount())}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: input.value, threads: threadCount() }),
+      headers: { "Content-Type": "text/plain" },
+      body: file || pasted,
     });
     const job = await readJson(response);
     if (!response.ok) throw new Error(job.error || "Could not start scan");
+    if (urlFile) urlFile.value = "";
+    if (fileName) fileName.textContent = "No file selected";
     renderJob(job, { items: [], errors: [] });
     startPolling(job.id);
   } catch (error) {
     setRunning(false);
-    showStatus(error.message, true);
+    showStatus(uploadErrorMessage(error), true);
   }
 });
 

@@ -383,12 +383,18 @@ async function runJob(job) {
   await persistMeta(job);
 }
 
+export const MAX_THREADS = 256;
+
 export function resolveThreads(requested, urlCount) {
   const count = Math.max(1, urlCount || 1);
-  if (requested === 0 || requested === "unlimited" || requested === "0") return count;
-  const n = Number(requested);
-  if (!Number.isFinite(n) || n < 1) return Math.min(8, count);
-  return Math.max(1, Math.round(n));
+  let n;
+  if (requested === 0 || requested === "unlimited" || requested === "0") {
+    n = count;
+  } else {
+    n = Number(requested);
+    if (!Number.isFinite(n) || n < 1) n = Math.min(8, count);
+  }
+  return Math.max(1, Math.min(MAX_THREADS, Math.round(n)));
 }
 
 export async function createJob({ text, urls, threads = 8 }) {
@@ -431,7 +437,12 @@ export async function createJob({ text, urls, threads = 8 }) {
   jobs.set(id, job);
   await persistUrls(job);
   await persistMeta(job);
-  for (const failed of job.errors) await persistError(job, failed);
+  if (job.errors.length) {
+    await appendFile(
+      path.join(jobDir(job.id), "errors.jsonl"),
+      `${job.errors.map((item) => JSON.stringify(item)).join("\n")}\n`,
+    );
+  }
   runJob(job).catch((error) => {
     job.status = "error";
     job.error = error.message;
