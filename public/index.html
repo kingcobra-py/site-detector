@@ -12,10 +12,11 @@
       <header class="hero">
         <p class="eyebrow">URL classifier</p>
         <h1>Paste URLs. See them in seller groups.</h1>
-        <p class="lede">
-          One URL or a whole list. The detector visits each page and sorts it into
-          gift cards / games / CD keys / top-up, eSIM, clothes, VPS / servers,
-          casino / gambling, or donation.
+          <p class="lede">
+          Paste URLs or upload a .txt list, including 200k lists. For large
+          lists, upload the file instead of pasting. The server scans in the
+          background and keeps the groups here. Tap a group to see those URLs,
+          sorted by confidence. Tap Screenshot on a match to view the live page.
         </p>
       </header>
 
@@ -25,51 +26,86 @@
           id="urls"
           name="urls"
           rows="8"
-          required
           placeholder="https://example.com&#10;https://another-shop.com&#10;shop3.com"
         ></textarea>
+        <label class="file-label">
+          Or upload a .txt / .csv list
+          <input id="url-file" type="file" accept=".txt,.csv,text/plain" />
+        </label>
+        <p id="upload-line" class="upload-line">No file selected</p>
         <div class="row actions">
-          <p class="hint">One per line, or separated by spaces or commas. Up to 40 URLs.</p>
-          <button type="submit" id="submit">Detect all</button>
+          <label class="threads">
+            Threads
+            <input id="threads" type="number" min="1" step="1" value="8" />
+          </label>
+          <label class="threads">
+            <input id="unlimited-threads" type="checkbox" />
+            Unlimited
+          </label>
+          <p class="hint">No URL limit. For 50k–200k lists, upload a .txt file. Unlimited is capped at 256 workers.</p>
+          <div class="buttons">
+            <button type="submit" id="submit">Detect all</button>
+            <button type="button" id="stop" class="stop">Stop</button>
+          </div>
         </div>
       </form>
 
       <section class="groups" aria-label="Tracked groups">
-        <article class="chip" data-group="digital_goods">
+        <button type="button" class="chip" data-group="digital_goods">
           <span class="dot"></span>
-          <span>Gift cards / Games / CD keys / Top-up</span>
+          <span>Gift cards / Video games / Xbox / Apple</span>
           <strong class="count" data-count="digital_goods">0</strong>
-        </article>
-        <article class="chip" data-group="esim">
+        </button>
+        <button type="button" class="chip" data-group="esim">
           <span class="dot"></span>
           <span>eSIM</span>
           <strong class="count" data-count="esim">0</strong>
-        </article>
-        <article class="chip" data-group="clothing">
+        </button>
+        <button type="button" class="chip" data-group="clothing">
           <span class="dot"></span>
           <span>Clothes</span>
           <strong class="count" data-count="clothing">0</strong>
-        </article>
-        <article class="chip" data-group="hosting">
+        </button>
+        <button type="button" class="chip" data-group="hosting">
           <span class="dot"></span>
           <span>VPS / Servers</span>
           <strong class="count" data-count="hosting">0</strong>
-        </article>
-        <article class="chip" data-group="gambling">
+        </button>
+        <button type="button" class="chip" data-group="proxies">
+          <span class="dot"></span>
+          <span>Proxies / ISP / Residential</span>
+          <strong class="count" data-count="proxies">0</strong>
+        </button>
+        <button type="button" class="chip" data-group="gambling">
           <span class="dot"></span>
           <span>Casino / Gambling</span>
           <strong class="count" data-count="gambling">0</strong>
-        </article>
-        <article class="chip" data-group="donation">
+        </button>
+        <button type="button" class="chip" data-group="donation">
           <span class="dot"></span>
           <span>Donation</span>
           <strong class="count" data-count="donation">0</strong>
-        </article>
+        </button>
+        <button type="button" class="chip" data-group="failed">
+          <span class="dot"></span>
+          <span>Failed</span>
+          <strong class="count" data-count="failed">0</strong>
+        </button>
       </section>
 
       <section id="status" class="status hidden" aria-live="polite"></section>
       <section id="result" class="result hidden"></section>
     </main>
+    <div id="shot-modal" class="shot-modal hidden" hidden>
+      <div class="shot-card">
+        <header>
+          <p id="shot-caption" class="meta">Screenshot</p>
+          <button type="button" id="shot-close" class="copy">Close</button>
+        </header>
+        <p id="shot-status" class="meta">Loading screenshot…</p>
+        <img id="shot-image" alt="Website screenshot" />
+      </div>
+    </div>
     <script src="/app.js" type="module"></script>
   </body>
 </html>

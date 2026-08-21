@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { GROUPS, SIGNALS, UNKNOWN_GROUP, groupById } from "./groups.js";
+import { GENERIC_DIGITAL_TERMS, GROUPS, OFF_TOPIC_VETO, SIGNALS, UNKNOWN_GROUP, groupById } from "./groups.js";
 
 const WORD_BOUNDARY_CACHE = new Map();
 
@@ -7,26 +7,40 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function foldText(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase();
+}
+
 function countMatches(haystack, term) {
-  let pattern = WORD_BOUNDARY_CACHE.get(term);
+  const folded = foldText(term);
+  let pattern = WORD_BOUNDARY_CACHE.get(folded);
   if (!pattern) {
-    const escaped = escapeRegExp(term);
-    const needsBoundary = /^[a-z0-9]/.test(term) && /[a-z0-9]$/.test(term);
-    pattern = new RegExp(needsBoundary ? `\\b${escaped}\\b` : escaped, "g");
-    WORD_BOUNDARY_CACHE.set(term, pattern);
+    const escaped = escapeRegExp(folded);
+    const spaceless = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}]/u.test(
+      folded,
+    );
+    const bounded =
+      !spaceless && /^[\p{L}\p{N}]/u.test(folded) && /[\p{L}\p{N}]$/u.test(folded);
+    pattern = new RegExp(
+      bounded ? `(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])` : escaped,
+      "gu",
+    );
+    WORD_BOUNDARY_CACHE.set(folded, pattern);
   }
   const matches = haystack.match(pattern);
   return matches ? matches.length : 0;
 }
 
 function normalizeText(value) {
-  return String(value || "")
-    .toLowerCase()
+  return foldText(value)
     .replace(/<script[\s\S]*?<\/script>/g, " ")
     .replace(/<style[\s\S]*?<\/style>/g, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&[a-z0-9#]+;/g, " ")
-    .replace(/[^a-z0-9+.\- ]+/g, " ")
+    .replace(/[^\p{L}\p{N}+.\- ]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -51,14 +65,17 @@ export function extractSignals(html, url = "") {
     .join(" ");
 
   let hostname = "";
+  let urlText = "";
   try {
-    hostname = new URL(url).hostname.replace(/^www\./, "");
+    const parsed = new URL(url);
+    hostname = parsed.hostname.replace(/^www\./, "");
+    urlText = `${parsed.hostname} ${parsed.pathname} ${parsed.search}`.replace(/[/?#=&._-]+/g, " ");
   } catch {
     hostname = "";
   }
 
   const body = normalizeText($("body").text() || raw).slice(0, 80_000);
-  const focused = normalizeText([title, description, keywords, headings, hostname].join(" "));
+  const focused = normalizeText([title, description, keywords, headings, hostname, urlText].join(" "));
 
   return {
     title: normalizeText(title),
@@ -102,6 +119,69 @@ export function scoreGroups(textBundle) {
   return { scores, matches };
 }
 
+const DIGITAL_HOSTS = [
+  "apple.com",
+  "xbox.com",
+  "microsoft.com",
+  "playstation.com",
+  "sony.com",
+  "steampowered.com",
+  "nintendo.com",
+  "eneba.com",
+  "kinguin.net",
+  "g2a.com",
+  "gamivo.com",
+  "fanatical.com",
+  "humblebundle.com",
+  "epicgames.com",
+];
+
+function digitalHostBonus(hostname) {
+  const host = String(hostname || "")
+    .replace(/^www\./, "")
+    .toLowerCase();
+  if (!host) return 0;
+  return DIGITAL_HOSTS.some((known) => host === known || host.endsWith(`.${known}`)) ? 20 : 0;
+}
+
+function scoreTermList(textBundle, terms) {
+  let score = 0;
+  for (const { term, weight } of terms) {
+    const focusedHits = countMatches(textBundle.focused, term);
+    const bodyHits = countMatches(textBundle.body, term);
+    if (!focusedHits && !bodyHits) continue;
+    score += focusedHits * weight * 2.4 + Math.min(bodyHits, 8) * weight;
+  }
+  return score;
+}
+
+function hostLooksOffTopic(hostname) {
+  const host = String(hostname || "")
+    .toLowerCase()
+    .replace(/^www\./, "");
+  return /\b(hotel|hotels|resort|resorts|motel|inn|lodge|restaurant|restaurants|pizza|pizzeria|sushi|burger|steakhouse|bakery|bbq|grill|cafe|coffee|dining|kitchen|bistro|tavern|eatery|lodging|marriott|hilton|hyatt|ihg|airbnb)\b/.test(
+    host.replace(/[.-]/g, " "),
+  );
+}
+
+export function applyDigitalGoodsGuard(scores, matches, textBundle) {
+  const digital = scores.digital_goods || 0;
+  if (digital <= 0) return scores;
+
+  const specificPoints = (matches.digital_goods || [])
+    .filter((item) => !GENERIC_DIGITAL_TERMS.has(item.term))
+    .reduce((sum, item) => sum + item.points, 0);
+  if (digitalHostBonus(textBundle.hostname)) return scores;
+  const veto = scoreTermList(textBundle, OFF_TOPIC_VETO);
+  const hostVeto = hostLooksOffTopic(textBundle.hostname) ? 16 : 0;
+  const offTopic = veto + hostVeto;
+
+  if (offTopic >= 8 && specificPoints < 14) {
+    scores.digital_goods = 0;
+  }
+  return scores;
+}
+
 export function pickWinner(scores) {
   const ranked = Object.entries(scores)
     .map(([id, score]) => ({ id, score }))
@@ -135,6 +215,8 @@ export function pickWinner(scores) {
 export function classifyPage({ html, url }) {
   const extracted = extractSignals(html, url);
   const { scores, matches } = scoreGroups(extracted);
+  scores.digital_goods = (scores.digital_goods || 0) + digitalHostBonus(extracted.hostname);
+  applyDigitalGoodsGuard(scores, matches, extracted);
   const { group, confidence, ranked } = pickWinner(scores);
 
   return {
@@ -149,4 +231,13 @@ export function classifyPage({ html, url }) {
     matches: matches[group.id] || [],
     allMatches: matches,
   };
+}
+
+export function classifyFromStored(item) {
+  const title = String(item.title || "").replace(/</g, " ");
+  const host = String(item.hostname || "");
+  return classifyPage({
+    html: `<html><head><title>${title}</title></head><body>${title} ${host}</body></html>`,
+    url: item.finalUrl || item.requestedUrl || "",
+  });
 }
